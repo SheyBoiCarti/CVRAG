@@ -1,0 +1,10 @@
+langchain
+langchain-community
+langchain-core
+langchain-text-splitters
+langchain-nvidia-ai-endpoints
+chromadb
+langchain-chroma
+pypdf
+python-dotenv
+streamlit

@@ -1,0 +1,35 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables & secrets
+.env
+
+# Vector DB & dynamic data storage
+vector_db/
+chroma_test_db/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# User documents & CV files
+documents/*.pdf
+documents/*.docx
+documents/*.txt
+!documents/README.md
+
