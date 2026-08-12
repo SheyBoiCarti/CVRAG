@@ -1,115 +1,88 @@
-# RAG CV / Resume Chatbot in LangChain
+# Chat with My CV
 
-An enterprise-grade Retrieval-Augmented Generation (RAG) pipeline built with **LangChain**, **NVIDIA AI Endpoints**, **ChromaDB**, and **Streamlit**. It loads documents (PDF, Markdown, TXT) from the `documents/` folder, performs tokenization and chunking, indexes them into a persistent vector database, and provides an interactive web chat UI and CLI interface for querying candidates' CVs.
+A focused Retrieval-Augmented Generation (RAG) portfolio demo built with Streamlit, LangChain, NVIDIA AI Endpoints, and ChromaDB. It answers questions about my fixed CV and displays the supporting CV excerpts and page numbers.
 
----
+## What it demonstrates
 
-## Key Features
+- PDF extraction and deterministic document chunking.
+- NVIDIA embeddings with a persistent local Chroma index.
+- Conversational retrieval for follow-up questions.
+- Streamed, evidence-grounded answers with inline source identifiers.
+- A responsive Streamlit chat interface.
+- Offline automated tests that do not consume API credit.
 
-- **Multi-Format Document Parsing**: Automatically ingests PDFs (`PyPDFLoader`), Text, and Markdown files from `./documents`.
-- **Tokenization & Recursive Chunking**: Uses `RecursiveCharacterTextSplitter` (chunk size: 700, overlap: 140) to preserve semantic context across chunk boundaries.
-- **NVIDIA AI Embeddings**: Embeds text chunks using `nvidia/nv-embedcode-7b-v1` into high-dimensional vector space.
-- **Persistent Vector Storage**: Uses **ChromaDB** to store vector embeddings and document metadata with disk persistence (`./vector_db`).
-- **State-of-the-Art LLM**: Powered by Meta `meta/llama-3.3-70b-instruct` via **ChatNVIDIA** endpoints.
-- **Interactive Web Interface**: Streamlit UI with Industrial Skeuomorphism aesthetic, suggested question chips, citation drawers, and session memory.
-- **Source Attributions**: Every LLM response cites the exact CV text snippets used to synthesize the answer.
+This is intentionally a fixed-CV portfolio demo, not a document-upload or multi-user recruitment platform. AI answers can be imperfect and should be verified against the displayed sources.
 
----
+## Architecture
 
-## Architecture Workflow
-
-```mermaid
-flowchart TD
-    A[CV Documents PDF/TXT/MD] -->|PyPDF / TextLoader| B[Raw LangChain Docs]
-    B -->|RecursiveCharacterSplitter| C[Tokenized Chunks]
-    C -->|NVIDIAEmbeddings nv-embedcode-7b-v1| D[(Chroma Vector DB)]
-    
-    E[User Question] -->|NVIDIA Embeddings| F[Query Vector]
-    F -->|Similarity Search| D
-    D -->|Top-k Relevant Snippets| G[Prompt Context Builder]
-    
-    E --> G
-    G -->|Context + Question| H[ChatNVIDIA llama-3.3-70b-instruct]
-    H --> I[Grounded Answer & Source Citations]
+```text
+Streamlit UI
+    -> cached CVChatEngine
+        -> fixed CV loader and chunker
+        -> local versioned Chroma index
+        -> NVIDIA embedding and chat endpoints
 ```
 
----
+The engine is cached once per Streamlit process. Conversation history remains isolated in each browser session. Streamlit Community Cloud may clear local application storage during restarts, so the small CV index can be rebuilt on a cold start.
 
-## Repository Structure
+## Local setup
 
-```
-cv_rag_pipeline/
-├── .env                    # Environment configuration (API keys & model names)
-├── .env.example            # Environment template
-├── .gitignore              # Excludes vector_db, secrets, and caches
-├── requirements.txt        # Python package dependencies
-├── README.md               # Documentation
-├── documents/              # Place CV PDFs, TXT, or MD files here
-│   ├── Candidate_CV.pdf    # Candidate CV / Resume (ignored by git)
-│   └── README.md
-├── vector_db/              # ChromaDB persistent storage directory
-├── rag/                    # RAG engine package
-│   ├── __init__.py         # Package exports
-│   ├── config.py           # Configuration & environment loader
-│   ├── document_loader.py  # Multi-format document loader & tokenizer
-│   ├── vector_store.py     # ChromaDB vector store & embeddings manager
-│   └── engine.py           # Conversational RAG pipeline & LLM prompt chain
-├── app.py                  # Streamlit Web Chat Interface
-└── test_pipeline.py        # Diagnostic & unit test runner
+Use Python 3.12 for the same runtime targeted by deployment.
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements-dev.txt
+Copy-Item .env.example .env
 ```
 
----
-
-## Quick Start Guide
-
-### 1. Prerequisites & Environment Setup
-
-Ensure Python 3.10+ is installed. Clone this repository and install the dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Configure NVIDIA API Key
-
-Create or edit the `.env` file in the root directory and add your NVIDIA AI Foundation Endpoints API Key:
+Edit `.env` and set your NVIDIA API key:
 
 ```ini
-NVIDIA_API_KEY=nvapi-your-key-here
-EMBEDDING_MODEL=nvidia/nv-embedcode-7b-v1
-LLM_MODEL=meta/llama-3.3-70b-instruct
+NVIDIA_API_KEY=your_nvidia_api_key_here
 ```
 
-### 3. Add CV Documents
+Run the app:
 
-Drop your CV / Resume into the `documents/` directory (`.pdf`, `.txt`, `.md`). The system will automatically scan, split, tokenize, and index all documents upon launch.
-
----
-
-## Running the Applications
-
-### Option A: Launch the Web Chat Interface (Streamlit)
-
-```bash
+```powershell
 streamlit run app.py
 ```
-Open your browser to `http://localhost:8501`.
 
-### Option B: Run Diagnostic Tests
+Run the offline checks:
 
-To verify document loading, tokenization, vector indexing, and RAG answer generation:
-
-```bash
-python test_pipeline.py
+```powershell
+python -m compileall -q app.py rag tests test_pipeline.py
+python -m pytest -q
+python -m pip check
 ```
 
----
+The optional live diagnostic performs embedding and retrieval API requests. Generation is enabled only with the explicit flag:
 
-## Code Comments & Implementation Highlights
+```powershell
+python test_pipeline.py
+python test_pipeline.py --with-llm
+```
 
-- **Tokenization / Text Splitting** (`rag/document_loader.py`):
-  Detailed explanations on how `RecursiveCharacterTextSplitter` breaks text on natural paragraph and line boundaries, ensuring chunks stay within LLM context budgets while maintaining semantic integrity with `chunk_overlap`.
-- **Vector Database & Embeddings** (`rag/vector_store.py`):
-  Documents how `NVIDIAEmbeddings` generates mathematical vector representations and how Chroma stores vector coordinates and metadata for fast similarity search.
-- **RAG Prompt Engineering** (`rag/engine.py`):
-  Examines how retrieved context snippets are dynamically injected into ChatNVIDIA system prompts to enforce strict factual grounding and eliminate hallucinations.
+## Deploy to Streamlit Community Cloud
+
+1. Push this private repository to GitHub.
+2. In Streamlit Community Cloud, create an app from the repository and select `app.py` as the entry point.
+3. Open the app's **Secrets** editor and add:
+
+   ```toml
+   NVIDIA_API_KEY = "your-rotated-nvidia-api-key"
+   ```
+
+4. Deploy and wait for the first cold-start index build.
+5. Complete [the deployment smoke test](docs/deployment-smoke-test.md).
+
+Never commit `.env`, `.env.txt`, or `.streamlit/secrets.toml`. If an API key has ever been stored in a local unprotected file, rotate it before deployment.
+
+## CV privacy
+
+The real CV PDF is deliberately included so Streamlit can deploy this fixed-document demo from a private repository. Making the repository public also publishes the CV and its Git history. If the original PDF should remain private, create a clean public repository containing a sanitized CV rather than deleting the PDF in a later commit.
+
+## Supported documents
+
+The loader supports PDF, UTF-8 text, and Markdown files placed directly in `documents/`. Hidden files, nested files, and `documents/README.md` are excluded. This deployed demo uses only `documents/Sheharyar CV 2026.pdf`.

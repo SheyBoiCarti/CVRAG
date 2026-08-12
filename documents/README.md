@@ -1,12 +1,11 @@
-# Documents Folder
+# CV documents
 
-Place your CV and any supporting documents (PDF, TXT, Markdown, DOCX) here.
+The loader accepts files placed directly in this directory with these extensions:
 
-Supported Formats:
-- `.pdf` (Curriculum Vitae / Resume / Certificates)
-- `.txt` (Text documents)
-- `.md` (Markdown files)
+- `.pdf`
+- `.txt`
+- `.md`
 
-The RAG pipeline automatically scans, splits (tokenizes), and indexes all documents present in this directory into ChromaDB.
+Files are split into overlapping character-based chunks for retrieval. Hidden files, nested files, and this README are excluded from indexing.
 
-Note: CV files (PDF, TXT, DOCX) placed in this folder are automatically ignored by `.gitignore` to prevent sensitive personal information from being committed.
+The deployed portfolio demo intentionally uses the fixed `Sheharyar CV 2026.pdf` document.
