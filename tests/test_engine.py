@@ -1,6 +1,8 @@
 from langchain_core.documents import Document
+import pytest
 
 from rag.engine import CVChatEngine
+from rag.errors import ProviderUnavailableError
 
 
 def test_standalone_question_does_not_need_rewrite():
@@ -40,3 +42,29 @@ def test_normalize_history_keeps_only_bounded_recent_turns():
         ("q4", "a4"),
         ("q5", "a5"),
     ]
+
+
+def test_partial_stream_is_not_replayed():
+    class BrokenChain:
+        calls = 0
+
+        def stream(self, payload):
+            self.calls += 1
+            yield "Partial"
+            raise TimeoutError("provider timeout")
+
+    chain = BrokenChain()
+    chunks = list(CVChatEngine._stream_once(chain, {"question": "q"}))
+
+    assert chunks == ["Partial"]
+    assert chain.calls == 1
+
+
+def test_failure_before_first_token_is_reported_as_unavailable():
+    class BrokenChain:
+        def stream(self, payload):
+            raise TimeoutError("provider timeout")
+            yield
+
+    with pytest.raises(ProviderUnavailableError):
+        list(CVChatEngine._stream_once(BrokenChain(), {"question": "q"}))

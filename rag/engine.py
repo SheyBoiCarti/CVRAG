@@ -232,3 +232,21 @@ class CVChatEngine:
             "question": prepared.question,
         }
         return self._stream_once(chain, payload), prepared.documents
+
+    @staticmethod
+    def _stream_once(chain: Any, payload: dict[str, Any]) -> Iterator[str]:
+        started = False
+        try:
+            for chunk in chain.stream(payload):
+                if chunk:
+                    started = True
+                    yield str(chunk)
+        except Exception as exc:
+            if started:
+                LOGGER.warning(
+                    "Provider stream interrupted (type=%s)", type(exc).__name__
+                )
+                return
+            if is_transient_error(exc):
+                raise ProviderUnavailableError() from exc
+            raise
