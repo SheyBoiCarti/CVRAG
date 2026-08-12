@@ -12,6 +12,9 @@ venv.bak/
 
 # Environment variables & secrets
 .env
+.env.*
+!.env.example
+.streamlit/secrets.toml
 
 # Vector DB & dynamic data storage
 vector_db/
@@ -29,8 +32,7 @@ chroma_test_db/
 Thumbs.db
 
 # User documents & CV files
-documents/*.pdf
-documents/*.docx
-documents/*.txt
+documents/*
 !documents/README.md
+!documents/Sheharyar CV 2026.pdf
 
