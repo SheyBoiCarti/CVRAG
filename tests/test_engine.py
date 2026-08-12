@@ -68,3 +68,27 @@ def test_failure_before_first_token_is_reported_as_unavailable():
 
     with pytest.raises(ProviderUnavailableError):
         list(CVChatEngine._stream_once(BrokenChain(), {"question": "q"}))
+
+
+def test_empty_retrieval_returns_not_found_without_calling_model():
+    class EmptyVectorManager:
+        def similarity_search(self, query, k):
+            return []
+
+    class ModelThatMustNotRun:
+        def invoke(self, payload):
+            raise AssertionError("The model must not run for empty retrieval")
+
+    engine = CVChatEngine(
+        auto_index=False,
+        vector_manager=EmptyVectorManager(),
+        llm=ModelThatMustNotRun(),
+    )
+
+    result = engine.query("What is not in the CV?")
+
+    assert result == {
+        "answer": "I couldn't find that information in the CV.",
+        "sources": [],
+        "retrieved_docs": [],
+    }

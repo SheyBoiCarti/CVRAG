@@ -1,78 +1,62 @@
+"""Opt-in live diagnostics for the deployed RAG dependencies."""
+
+import argparse
 import sys
-import site
-from pathlib import Path
-
-# Ensure UTF-8 output encoding for Windows terminal compatibility
-if sys.stdout and hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
-
-# Add project root to sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from rag.config import Config
 from rag.document_loader import CVDocumentLoader
-from rag.vector_store import VectorStoreManager
 from rag.engine import CVChatEngine
+from rag.vector_store import VectorStoreManager
 
-def run_diagnostics():
-    """
-    Test suite for validating each component of the CV RAG Pipeline.
-    """
-    print("=" * 60)
-    print("Running RAG Pipeline Component Diagnostics")
-    print("=" * 60)
 
-    # 1. Config Validation
-    print("\n1. Checking Environment & Config...")
+def run_diagnostics(with_llm: bool = False) -> int:
     try:
         Config.validate()
-        key_str = Config.NVIDIA_API_KEY or ""
-        masked_key = key_str[:6] + "..." + key_str[-4:] if len(key_str) > 10 else "***"
-        print(f"   [OK] API Key detected: {masked_key}")
-        print(f"   [OK] LLM Model: {Config.LLM_MODEL}")
-        print(f"   [OK] Embedding Model: {Config.EMBEDDING_MODEL}")
-        print(f"   [OK] Documents Dir: {Config.DOCUMENTS_DIR}")
-    except Exception as e:
-        print(f"   [FAIL] Config error: {e}")
-        return
+        chunks = CVDocumentLoader().load_and_split()
+        if not chunks:
+            raise RuntimeError("No CV chunks were loaded")
 
-    # 2. Document Loader & Tokenizer / Chunker Test
-    print("\n2. Testing Document Loader & Tokenizer...")
-    loader = CVDocumentLoader()
-    raw_docs = loader.load_documents()
-    print(f"   [OK] Loaded {len(raw_docs)} raw document page(s).")
-    
-    chunks = loader.split_documents(raw_docs)
-    print(f"   [OK] Chunking created {len(chunks)} text chunks.")
-    if chunks:
-        print(f"   Sample Chunk #1 snippet:\n   \"{chunks[0].page_content[:150]}...\"")
+        vector_manager = VectorStoreManager()
+        count = vector_manager.ensure_documents(chunks)
+        if count < 1:
+            raise RuntimeError("The vector index is empty")
 
-    # 3. Vector Database Test
-    print("\n3. Testing Vector Database & NVIDIA Embeddings...")
-    vector_mgr = VectorStoreManager()
-    vector_mgr.build_vector_store(chunks)
-    count = vector_mgr.get_document_count()
-    print(f"   [OK] ChromaDB holds {count} indexed vector chunks.")
+        results = vector_manager.similarity_search(
+            "What skills and experience are listed?", k=2
+        )
+        if not results:
+            raise RuntimeError("The retrieval smoke test returned no results")
 
-    # 4. Similarity Search Test
-    print("\n4. Testing Similarity Search...")
-    test_query = "What technical skills, programming languages, or degree does the candidate have?"
-    results = vector_mgr.similarity_search_with_scores(test_query, k=2)
-    print(f"   Query: '{test_query}'")
-    for doc, score in results:
-        print(f"   - Match Score: {score:.4f} | Snippet: {doc.page_content[:120]}...")
+        print(f"Configuration: OK")
+        print(f"Loaded chunks: {len(chunks)}")
+        print(f"Indexed chunks: {count}")
+        print(f"Retrieval results: {len(results)}")
 
-    # 5. End-to-End RAG Engine Test
-    print("\n5. Testing End-to-End RAG Answer Generation...")
-    engine = CVChatEngine(auto_index=False)
-    output = engine.query("Give me a quick 2-sentence summary of the candidate.")
-    print("\n   LLM Answer:")
-    print(f"   {output['answer']}")
-    print(f"\n   Cited Sources: {output['sources']}")
+        if with_llm:
+            response = CVChatEngine(auto_index=False).query(
+                "Give a one-sentence professional summary."
+            )
+            if not response["answer"]:
+                raise RuntimeError("The LLM returned an empty answer")
+            print("LLM generation: OK")
+        else:
+            print("LLM generation: SKIPPED (use --with-llm to enable)")
+        return 0
+    except Exception as exc:
+        print(f"Diagnostics failed: {type(exc).__name__}", file=sys.stderr)
+        return 1
 
-    print("\n" + "=" * 60)
-    print("Diagnostics complete! All pipeline stages operating normally.")
-    print("=" * 60)
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--with-llm",
+        action="store_true",
+        help="Perform one paid NVIDIA chat-generation request.",
+    )
+    args = parser.parse_args()
+    return run_diagnostics(with_llm=args.with_llm)
+
 
 if __name__ == "__main__":
-    run_diagnostics()
+    raise SystemExit(main())
