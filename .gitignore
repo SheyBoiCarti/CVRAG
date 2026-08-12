@@ -20,6 +20,7 @@ chroma_test_db/
 # IDE files
 .vscode/
 .idea/
+.worktrees/
 *.swp
 *.swo
 
