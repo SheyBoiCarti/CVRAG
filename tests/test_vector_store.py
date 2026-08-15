@@ -2,7 +2,11 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 import pytest
 
-from rag.vector_store import VectorStoreManager, retry_transient
+from rag.vector_store import (
+    VectorStoreManager,
+    provider_error_details,
+    retry_transient,
+)
 
 
 class FakeEmbeddings(Embeddings):
@@ -90,4 +94,47 @@ def test_retry_transient_succeeds_after_transient_500(monkeypatch):
     result = retry_transient(flaky, max_attempts=3)
     assert result == "success"
     assert attempts == 2
+
+
+def test_provider_error_details_extracts_status_and_safe_summary():
+    exc = Exception("[500] Something went wrong with the request.\n{'status': 500}")
+
+    assert provider_error_details(exc) == (
+        500,
+        "[500] Something went wrong with the request. {'status': 500}",
+    )
+
+
+def test_provider_error_details_redacts_credentials():
+    exc = Exception(
+        "Authorization: Bearer secret-token NVIDIA_API_KEY=nvapi-secret-value"
+    )
+
+    status, detail = provider_error_details(exc)
+
+    assert status is None
+    assert "secret-token" not in detail
+    assert "nvapi-secret-value" not in detail
+    assert detail == "Authorization: Bearer [REDACTED] NVIDIA_API_KEY=[REDACTED]"
+
+
+def test_retry_log_has_safe_provider_context(monkeypatch, caplog):
+    monkeypatch.setattr("rag.vector_store.time.sleep", lambda _delay: None)
+    monkeypatch.setattr("rag.vector_store.random.uniform", lambda _a, _b: 0)
+
+    def fail():
+        raise Exception("[503] unavailable NVIDIA_API_KEY=nvapi-secret")
+
+    with caplog.at_level("WARNING"), pytest.raises(Exception):
+        retry_transient(
+            fail,
+            max_attempts=2,
+            operation_name="embed_documents",
+            model="nvidia/nv-embedqa-e5-v5",
+        )
+
+    assert "operation=embed_documents" in caplog.text
+    assert "model=nvidia/nv-embedqa-e5-v5" in caplog.text
+    assert "status=503" in caplog.text
+    assert "nvapi-secret" not in caplog.text
 

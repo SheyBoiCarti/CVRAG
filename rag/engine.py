@@ -213,7 +213,10 @@ class CVChatEngine:
         }
         try:
             answer = retry_transient(
-                lambda: chain.invoke(payload), Config.MAX_RETRIES
+                lambda: chain.invoke(payload),
+                Config.MAX_RETRIES,
+                operation_name="chat_generation",
+                model=str(Config.LLM_MODEL),
             )
         except Exception as exc:
             if is_transient_error(exc):
