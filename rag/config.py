@@ -55,7 +55,7 @@ class Config:
     EMBEDDING_BATCH_SIZE = int(_get_setting("EMBEDDING_BATCH_SIZE", "15"))
 
     # Schema version tag: bump this to automatically invalidate and recreate vector collections
-    INDEX_SCHEMA_VERSION = "v3"
+    INDEX_SCHEMA_VERSION = "v4"
 
     @classmethod
     def make_collection_name(cls) -> str:
