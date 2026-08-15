@@ -1,0 +1,19 @@
+from langchain_core.documents import Document
+
+from rag.presentation import citation_view
+
+
+def test_citation_view_preserves_untrusted_text_as_data():
+    doc = Document(
+        page_content='<img src=x onerror="alert(1)">',
+        metadata={
+            "source": "C:/private/cv.pdf",
+            "page": 1,
+            "evidence_id": "S2",
+        },
+    )
+
+    view = citation_view(doc)
+
+    assert view.label == "S2 · cv.pdf · page 2"
+    assert view.excerpt == '<img src=x onerror="alert(1)">'
