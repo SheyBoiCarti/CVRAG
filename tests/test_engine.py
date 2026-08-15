@@ -1,7 +1,8 @@
 from langchain_core.documents import Document
+from langchain_core.runnables import RunnableLambda
 import pytest
 
-from rag.engine import CVChatEngine
+from rag.engine import CVChatEngine, NO_RESULTS_ANSWER
 from rag.errors import ProviderUnavailableError
 
 
@@ -92,3 +93,50 @@ def test_empty_retrieval_returns_not_found_without_calling_model():
         "sources": [],
         "retrieved_docs": [],
     }
+
+
+def test_prepare_query_retrieves_before_streaming_generation():
+    expected_document = Document(
+        page_content="Delivered measurable engineering outcomes.",
+        metadata={"chunk_id": "strengths", "source": "cv.md", "page": 0},
+    )
+
+    class OneResultVectorManager:
+        def similarity_search(self, query, k):
+            return [expected_document]
+
+    def fail_if_generated(_messages):
+        raise AssertionError("Preparation must not invoke the model")
+
+    engine = CVChatEngine(
+        auto_index=False,
+        vector_manager=OneResultVectorManager(),
+        llm=RunnableLambda(fail_if_generated),
+    )
+
+    prepared = engine.prepare_query("Why should I hire this person?")
+
+    assert [doc.page_content for doc in prepared.documents] == [
+        "Delivered measurable engineering outcomes."
+    ]
+    engine.llm = RunnableLambda(lambda _messages: "Strong evidence [S1].")
+    assert "".join(engine.stream_prepared(prepared)) == "Strong evidence [S1]."
+
+
+def test_stream_prepared_returns_not_found_without_generation():
+    class EmptyVectorManager:
+        def similarity_search(self, query, k):
+            return []
+
+    def fail_if_generated(_messages):
+        raise AssertionError("The model must not run for empty retrieval")
+
+    engine = CVChatEngine(
+        auto_index=False,
+        vector_manager=EmptyVectorManager(),
+        llm=RunnableLambda(fail_if_generated),
+    )
+
+    prepared = engine.prepare_query("What is not in the CV?")
+
+    assert list(engine.stream_prepared(prepared)) == [NO_RESULTS_ANSWER]

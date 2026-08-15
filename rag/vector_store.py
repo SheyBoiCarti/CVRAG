@@ -77,8 +77,11 @@ class RobustNVIDIAEmbeddings(Embeddings):
             model=model,
             api_key=api_key,
             truncate="NONE",
-            timeout=timeout,
         )
+        # NVIDIAEmbeddings 1.4.3 accepts but ignores a top-level timeout keyword.
+        # Apply the configured bound directly to both pinned transport clients.
+        self.client._client.timeout = timeout
+        self.client._async_client.timeout = timeout
         self.batch_size = batch_size
         self.max_retries = max_retries
 

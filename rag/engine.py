@@ -157,12 +157,13 @@ class CVChatEngine:
             messages.extend([("human", human), ("ai", assistant)])
         return messages
 
-    def _prepare(
+    def prepare_query(
         self,
         question: str,
-        chat_history: list[tuple[str, str]] | None,
-        k: int | None,
+        chat_history: list[tuple[str, str]] | None = None,
+        k: int | None = None,
     ) -> PreparedQuery:
+        """Validates a question and retrieves the evidence needed for generation."""
         normalized_question = Config.validate_question(question)
         history = self.normalize_history(chat_history)
         retrieval_query = self.prepare_retrieval_query(normalized_question, history)
@@ -201,7 +202,7 @@ class CVChatEngine:
         k: int | None = None,
     ) -> dict[str, Any]:
         """Synchronously retrieves context, executes prompt synthesis, and returns cited sources."""
-        prepared = self._prepare(question, chat_history, k)
+        prepared = self.prepare_query(question, chat_history, k)
         if not prepared.documents:
             return {"answer": NO_RESULTS_ANSWER, "sources": [], "retrieved_docs": []}
 
@@ -235,16 +236,20 @@ class CVChatEngine:
         k: int | None = None,
     ) -> tuple[Iterator[str], list[Document]]:
         """Streams generated tokens with transient retry support and returns retrieved evidence."""
-        prepared = self._prepare(question, chat_history, k)
+        prepared = self.prepare_query(question, chat_history, k)
+        return self.stream_prepared(prepared), prepared.documents
+
+    def stream_prepared(self, prepared: PreparedQuery) -> Iterator[str]:
+        """Streams an answer for evidence returned by :meth:`prepare_query`."""
         if not prepared.documents:
-            return iter([NO_RESULTS_ANSWER]), []
+            return iter([NO_RESULTS_ANSWER])
         chain = self.prompt | self.llm | StrOutputParser()
         payload = {
             "context": prepared.context,
             "chat_history": prepared.history_messages,
             "question": prepared.question,
         }
-        return self._stream_once(chain, payload), prepared.documents
+        return self._stream_once(chain, payload)
 
     @staticmethod
     def _stream_once(chain: Any, payload: dict[str, Any]) -> Iterator[str]:

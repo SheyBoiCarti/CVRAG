@@ -2,7 +2,11 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 import pytest
 
-from rag.vector_store import VectorStoreManager, retry_transient
+from rag.vector_store import (
+    RobustNVIDIAEmbeddings,
+    VectorStoreManager,
+    retry_transient,
+)
 
 
 class FakeEmbeddings(Embeddings):
@@ -25,6 +29,17 @@ def test_ensure_documents_is_idempotent(tmp_path):
     assert manager.ensure_documents(chunks) == 1
     assert manager.ensure_documents(chunks) == 1
     assert manager.get_document_count() == 1
+
+
+def test_embedding_timeout_reaches_transport_clients():
+    embeddings = RobustNVIDIAEmbeddings(
+        model="nvidia/nv-embedqa-e5-v5",
+        api_key="test-key",
+        timeout=7.5,
+    )
+
+    assert embeddings.client._client.timeout == 7.5
+    assert embeddings.client._async_client.timeout == 7.5
 
 
 def test_permanent_embedding_failure_is_not_retried():

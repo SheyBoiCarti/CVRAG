@@ -1,3 +1,4 @@
+import logging
 import sys
 from pathlib import Path
 import streamlit as st
@@ -6,12 +7,16 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from rag.config import Config
-from rag.engine import CVChatEngine
+from rag.engine import CVChatEngine, NO_RESULTS_ANSWER
+from rag.presentation import query_error_message
 from ui.chat_feed import get_human_source_label, render_chat_history
 from ui.header import render_header
 from ui.hero import render_hero
 from ui.sidebar import render_sidebar
 from ui.styles import inject_custom_css
+
+
+LOGGER = logging.getLogger(__name__)
 
 st.set_page_config(
     page_title="Sheharyar Nadeem // AI CV Portfolio",
@@ -58,21 +63,31 @@ if active_query:
             st.write(active_query)
 
     with st.chat_message("assistant"):
+        stage = "retrieval"
         try:
             # Bound conversational turns passed to LLM to prevent context overflow
             history_tuples = [(h[0], h[1]) for h in st.session_state.chat_history[-4:]]
 
             with st.spinner("Searching CV..."):
-                stream_gen, retrieved_docs = engine.query_stream(
+                prepared = engine.prepare_query(
                     question=active_query, chat_history=history_tuples
                 )
-                answer = st.write_stream(stream_gen)
-                sources = sorted(
-                    {
-                        Path(str(doc.metadata.get("source", "CV"))).name
-                        for doc in retrieved_docs
-                    }
-                )
+
+            retrieved_docs = prepared.documents
+            if retrieved_docs:
+                stage = "generation"
+                with st.spinner("Generating answer..."):
+                    answer = st.write_stream(engine.stream_prepared(prepared))
+            else:
+                answer = NO_RESULTS_ANSWER
+                st.markdown(answer)
+
+            sources = sorted(
+                {
+                    Path(str(doc.metadata.get("source", "CV"))).name
+                    for doc in retrieved_docs
+                }
+            )
 
             if sources:
                 label = get_human_source_label(sources)
@@ -82,8 +97,13 @@ if active_query:
                             f"<div class='source-snippet'><div class='source-snippet-header'>Reference Snippet #{i}</div>{doc.page_content}</div>",
                             unsafe_allow_html=True,
                         )
-        except Exception:
-            answer = "Couldn't generate a response right now. Please try asking your question again."
+        except Exception as exc:
+            LOGGER.warning(
+                "CV query failed (stage=%s, type=%s)",
+                stage,
+                type(exc).__name__,
+            )
+            answer = query_error_message(exc)
             st.markdown(answer)
             sources, retrieved_docs = [], []
 
@@ -91,4 +111,3 @@ if active_query:
         (active_query, answer, sources, retrieved_docs)
     )
     st.rerun()
-
