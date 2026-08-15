@@ -68,6 +68,7 @@ htmlcov/
 Thumbs.db
 desktop.ini
 
-# User documents & custom CV files (keep local, never commit)
+# User documents & custom CV files (keep local, never commit except tracked portfolio CV)
 documents/*
 !documents/.gitkeep
+!documents/Custom_CV.md
