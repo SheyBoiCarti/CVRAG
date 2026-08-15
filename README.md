@@ -132,7 +132,14 @@ python test_pipeline.py --with-llm
 
    ```toml
    NVIDIA_API_KEY = "your-nvidia-api-key-here"
+   EMBEDDING_MODEL = "nvidia/nv-embedqa-e5-v5"
    ```
 
-5. Click **Deploy**. The application will initialize the vector index on cold start and be ready to serve visitors.
+   Streamlit Secrets override repository defaults and local `.env` values. Remove any stale `EMBEDDING_MODEL = "nvidia/nv-embedcode-7b-v1"` entry; that model identifier is not used by this deployment.
+
+5. Click **Deploy**. The application will initialize the vector index once per fresh server process and reuse it across reruns and visitor sessions.
 6. Verify your deployment against the [Deployment Smoke Test Checklist](docs/deployment-smoke-test.md).
+
+`vector_db/` is intentionally ignored and is not copied to Streamlit Community Cloud. A fresh container therefore performs one NVIDIA document-embedding pass before serving searches. Chroma data is reused for the lifetime of that container, but may be rebuilt after a reboot or redeployment because Community Cloud's local filesystem is not a durable deployment artifact.
+
+If startup fails, inspect the server log entry for `operation`, `model`, `status`, and `detail`. These diagnostics are bounded and redact credential-shaped values. A model of `nvidia/nv-embedcode-7b-v1` means Streamlit Secrets are overriding the supported repository default; update it to `nvidia/nv-embedqa-e5-v5` and reboot the app.
