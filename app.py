@@ -9,6 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from rag.config import Config
 from rag.engine import CVChatEngine, NO_RESULTS_ANSWER
 from rag.presentation import query_error_message
+from rag.runtime import get_engine
+from rag.vector_store import provider_error_details
 from ui.chat_feed import get_human_source_label, render_chat_history
 from ui.header import render_header
 from ui.hero import render_hero
@@ -31,20 +33,28 @@ render_header()
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Recreate engine if absent or if LLM configuration changed dynamically
-if (
-    "engine" not in st.session_state
-    or st.session_state.get("current_llm_model") != Config.LLM_MODEL
-):
-    try:
-        with st.spinner("Initializing AI engine..."):
-            st.session_state.engine = CVChatEngine(auto_index=True)
-            st.session_state.current_llm_model = Config.LLM_MODEL
-    except Exception as e:
-        st.error(f"Initialization Error: {e}")
-        st.stop()
-
-engine: CVChatEngine = st.session_state.engine
+try:
+    with st.spinner("Initializing AI engine..."):
+        engine: CVChatEngine = get_engine(
+            Config.LLM_MODEL or "",
+            Config.EMBEDDING_MODEL or "",
+            Config.COLLECTION_NAME,
+        )
+except Exception as exc:
+    status, detail = provider_error_details(exc)
+    LOGGER.error(
+        "AI engine initialization failed (embedding_model=%s, status=%s, "
+        "type=%s, detail=%s)",
+        Config.EMBEDDING_MODEL,
+        status if status is not None else "unknown",
+        type(exc).__name__,
+        detail,
+    )
+    st.error(
+        "The AI search index could not be initialized. "
+        "Please try again later; the deployment owner can check the server logs."
+    )
+    st.stop()
 
 # Show interactive suggestions when conversation is empty; otherwise render conversation feed
 selected_prompt = None

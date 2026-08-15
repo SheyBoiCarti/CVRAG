@@ -140,3 +140,24 @@ def test_stream_prepared_returns_not_found_without_generation():
     prepared = engine.prepare_query("What is not in the CV?")
 
     assert list(engine.stream_prepared(prepared)) == [NO_RESULTS_ANSWER]
+
+
+def test_ensure_indexed_rechecks_after_acquiring_lock():
+    class ManagerPopulatedByAnotherInitializer:
+        counts = iter([0, 7])
+
+        def get_document_count(self):
+            return next(self.counts)
+
+        def ensure_documents(self, chunks):
+            raise AssertionError("documents must not be embedded twice")
+
+    class LoaderThatMustNotRun:
+        def load_and_split(self):
+            raise AssertionError("documents must not be loaded after the recheck")
+
+    engine = object.__new__(CVChatEngine)
+    engine.vector_manager = ManagerPopulatedByAnotherInitializer()
+    engine.loader = LoaderThatMustNotRun()
+
+    assert engine.ensure_indexed() == 7
