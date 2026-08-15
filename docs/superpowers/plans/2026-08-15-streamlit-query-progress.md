@@ -173,7 +173,7 @@ Run: `git diff --check` and `git diff -- app.py rag tests`
 
 Expected: no whitespace errors; only scoped staged-progress, error-handling, timeout, and test changes appear.
 
-- [ ] **Step 5: Commit the implementation**
+- [x] **Step 5: Commit the implementation**
 
 ```powershell
 git add -- app.py rag/engine.py rag/vector_store.py rag/presentation.py tests/test_engine.py tests/test_vector_store.py tests/test_presentation.py
