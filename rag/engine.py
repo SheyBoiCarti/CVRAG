@@ -1,5 +1,6 @@
 import logging
 import re
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
@@ -16,6 +17,7 @@ from rag.vector_store import VectorStoreManager, is_transient_error, retry_trans
 
 
 LOGGER = logging.getLogger(__name__)
+_INDEX_LOCK = threading.Lock()
 NO_RESULTS_ANSWER = "I couldn't find that information in the CV."
 
 
@@ -81,10 +83,15 @@ class CVChatEngine:
 
     def ensure_indexed(self) -> int:
         """Indexes CV documents into ChromaDB if the collection is currently empty."""
-        if self.vector_manager.get_document_count() > 0:
-            return self.vector_manager.get_document_count()
-        chunks = self.loader.load_and_split()
-        return self.vector_manager.ensure_documents(chunks)
+        count = self.vector_manager.get_document_count()
+        if count > 0:
+            return count
+        with _INDEX_LOCK:
+            count = self.vector_manager.get_document_count()
+            if count > 0:
+                return count
+            chunks = self.loader.load_and_split()
+            return self.vector_manager.ensure_documents(chunks)
 
     @classmethod
     def should_rewrite_question(cls, question: str) -> bool:
