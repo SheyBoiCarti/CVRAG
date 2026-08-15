@@ -26,7 +26,10 @@ def provider_error_details(exc: Exception) -> tuple[int | None, str]:
     """Returns a bounded provider error summary with credential shapes redacted."""
     raw_status = getattr(exc, "status_code", None)
     status = raw_status if isinstance(raw_status, int) else None
-    detail = " ".join(str(exc).split())
+    detail = next(
+        (line.strip() for line in str(exc).splitlines() if line.strip()),
+        "",
+    )
     if status is None:
         match = STATUS_PATTERN.search(detail)
         status = int(match.group(1)) if match else None
@@ -41,7 +44,9 @@ def is_transient_error(exc: Exception) -> bool:
     if isinstance(exc, (TimeoutError, ConnectionError)):
         return True
     status_code, msg = provider_error_details(exc)
-    if status_code == 429 or (isinstance(status_code, int) and status_code >= 500):
+    if status_code == 429 or (
+        isinstance(status_code, int) and 500 <= status_code < 600
+    ):
         return True
     name = type(exc).__name__.lower()
     if any(k in name for k in ("timeout", "connection", "ratelimit")):

@@ -67,6 +67,8 @@ def test_transient_embedding_failure_is_bounded(monkeypatch):
         (TimeoutError("request timed out"), True),
         (ConnectionError("connection reset"), True),
         (Exception("[500] Something went wrong with the request."), True),
+        (Exception("[599] Upstream failure"), True),
+        (Exception("[600] Non-HTTP status"), False),
         (Exception("[503] ResourceExhausted: Worker limit reached"), True),
         (Exception("[429] Rate limit exceeded"), True),
         (Exception("[404] Not Found"), False),
@@ -101,8 +103,18 @@ def test_provider_error_details_extracts_status_and_safe_summary():
 
     assert provider_error_details(exc) == (
         500,
-        "[500] Something went wrong with the request. {'status': 500}",
+        "[500] Something went wrong with the request.",
     )
+
+
+def test_provider_error_details_omits_multiline_response_body():
+    exc = Exception("[422] Invalid request\nCV text echoed by provider")
+
+    status, detail = provider_error_details(exc)
+
+    assert status == 422
+    assert detail == "[422] Invalid request"
+    assert "CV text" not in detail
 
 
 def test_provider_error_details_redacts_credentials():
