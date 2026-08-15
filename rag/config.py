@@ -9,8 +9,24 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 
+def _get_setting(key: str, default: str | None = None) -> str | None:
+    """Reads setting from os.environ with fallback to st.secrets for Streamlit deployments."""
+    val = os.getenv(key)
+    if val is not None and val != "":
+        return val
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and key in st.secrets:
+            secret_val = st.secrets[key]
+            if secret_val is not None:
+                return str(secret_val)
+    except Exception:
+        pass
+    return default
+
+
 def _configured_path(name: str, default: Path) -> Path:
-    configured = Path(os.getenv(name, str(default)))
+    configured = Path(_get_setting(name, str(default)) or str(default))
     if not configured.is_absolute():
         configured = BASE_DIR / configured
     return configured.resolve()
@@ -20,26 +36,26 @@ class Config:
     """Centralized configuration and runtime validation for the CV RAG assistant."""
 
     BASE_DIR = BASE_DIR
-    NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
-    LLM_MODEL = os.getenv("LLM_MODEL", "meta/llama-3.3-70b-instruct")
-    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nvidia/nv-embedcode-7b-v1")
+    NVIDIA_API_KEY = _get_setting("NVIDIA_API_KEY")
+    LLM_MODEL = _get_setting("LLM_MODEL", "meta/llama-3.3-70b-instruct")
+    EMBEDDING_MODEL = _get_setting("EMBEDDING_MODEL", "nvidia/nv-embedqa-e5-v5")
     DOCUMENTS_DIR = _configured_path("DOCUMENTS_DIR", BASE_DIR / "documents")
     VECTOR_DB_DIR = _configured_path("VECTOR_DB_DIR", BASE_DIR / "vector_db")
 
     # Document chunking parameters tuned for resume section continuity
-    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "700"))
-    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "140"))
-    RETRIEVAL_K = int(os.getenv("RETRIEVAL_K", "6"))
-    MAX_QUESTION_CHARS = int(os.getenv("MAX_QUESTION_CHARS", "1000"))
-    MAX_HISTORY_TURNS = int(os.getenv("MAX_HISTORY_TURNS", "4"))
+    CHUNK_SIZE = int(_get_setting("CHUNK_SIZE", "700"))
+    CHUNK_OVERLAP = int(_get_setting("CHUNK_OVERLAP", "140"))
+    RETRIEVAL_K = int(_get_setting("RETRIEVAL_K", "6"))
+    MAX_QUESTION_CHARS = int(_get_setting("MAX_QUESTION_CHARS", "1000"))
+    MAX_HISTORY_TURNS = int(_get_setting("MAX_HISTORY_TURNS", "4"))
 
     # Upstream provider resilience settings
-    REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "45"))
-    MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
-    EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "15"))
+    REQUEST_TIMEOUT = float(_get_setting("REQUEST_TIMEOUT", "45"))
+    MAX_RETRIES = int(_get_setting("MAX_RETRIES", "3"))
+    EMBEDDING_BATCH_SIZE = int(_get_setting("EMBEDDING_BATCH_SIZE", "15"))
 
     # Schema version tag: bump this to automatically invalidate and recreate vector collections
-    INDEX_SCHEMA_VERSION = "v2"
+    INDEX_SCHEMA_VERSION = "v3"
 
     @classmethod
     def make_collection_name(cls) -> str:
@@ -66,6 +82,8 @@ class Config:
     @classmethod
     def validate(cls) -> None:
         """Validates critical runtime configuration before executing retrieval or generation."""
+        if not cls.NVIDIA_API_KEY:
+            cls.NVIDIA_API_KEY = _get_setting("NVIDIA_API_KEY")
         if not cls.NVIDIA_API_KEY:
             raise ValueError("NVIDIA_API_KEY is not configured.")
         if cls.CHUNK_OVERLAP >= cls.CHUNK_SIZE:

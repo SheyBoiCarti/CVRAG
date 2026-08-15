@@ -59,7 +59,7 @@ Honours graduate in Computer Science and Information Systems (Cum Laude) with a 
 ### 1. RAG Chatbot Pipeline
 *Python, LangChain, ChromaDB, NVIDIA AI Endpoints, Streamlit*
 - Designed and built an Retrieval-Augmented Generation (RAG) system to index, query, and chat with candidate resumes and technical documentation.
-- Integrated `nvidia/nv-embedcode-7b-v1` for text chunk vector embeddings and `meta/llama-3.3-70b-instruct` via ChatNVIDIA for grounded response synthesis.
+- Integrated `nvidia/nv-embedqa-e5-v5` for text chunk vector embeddings and `meta/llama-3.3-70b-instruct` via ChatNVIDIA for grounded response synthesis.
 - Implemented `RecursiveCharacterTextSplitter` tokenization (700-char chunks, 140-char overlap) and ChromaDB persistent vector storage.
 - Built a Streamlit web interface complete with suggested questions, citation expanders for source attribution, and session memory.
 

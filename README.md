@@ -9,7 +9,7 @@ Recruiters, hiring managers, and engineers can explore broad career highlights o
 ## Key Highlights
 
 - **Multi-Document Ingestion**: Automatically scans, parses, and indexes any collection of `.pdf`, `.md`, or `.txt` files placed in `documents/` (e.g., CVs, thesis papers, project writeups, and technical documentation).
-- **Cross-Document Semantic Search**: Powered by NVIDIA Code & Text Embeddings (`nvidia/nv-embedcode-7b-v1`) stored in a local, persistent ChromaDB vector store, enabling cross-referencing across diverse documents.
+- **Cross-Document Semantic Search**: Powered by NVIDIA QA & Text Embeddings (`nvidia/nv-embedqa-e5-v5`) stored in a local, persistent ChromaDB vector store, enabling cross-referencing across diverse documents.
 - **Bullet-Aware Text Splitting**: Preserves resume formatting, technical lists, and project sections with tuned chunk sizes (`chunk_size=700`, `overlap=140`) to maintain semantic context continuity.
 - **Conversational Context Reformulation**: Automatically detects and reformulates pronoun-heavy follow-up questions (e.g., *"What technologies did he use for that project?"*) into standalone search queries using conversational history.
 - **Evidence-Grounded Streaming**: Synthesizes responses via Meta Llama 3.3 70B Instruct (`meta/llama-3.3-70b-instruct`) with strict evidence grounding and granular source citation expanders.

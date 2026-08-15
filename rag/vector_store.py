@@ -22,7 +22,25 @@ def is_transient_error(exc: Exception) -> bool:
     if status_code == 429 or (isinstance(status_code, int) and status_code >= 500):
         return True
     name = type(exc).__name__.lower()
-    return "timeout" in name or "connection" in name or "ratelimit" in name
+    if any(k in name for k in ("timeout", "connection", "ratelimit")):
+        return True
+    msg = str(exc).lower()
+    if any(code in msg for code in ("[429]", "[500]", "[502]", "[503]", "[504]", "429", "500", "502", "503", "504")):
+        return True
+    if any(
+        phrase in msg
+        for phrase in (
+            "resourceexhausted",
+            "rate limit",
+            "too many requests",
+            "service unavailable",
+            "bad gateway",
+            "gateway timeout",
+            "temporarily unavailable",
+        )
+    ):
+        return True
+    return False
 
 
 def retry_transient(operation, max_attempts: int):

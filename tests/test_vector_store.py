@@ -55,3 +55,39 @@ def test_transient_embedding_failure_is_bounded(monkeypatch):
         retry_transient(fail, max_attempts=3)
 
     assert attempts == 3
+
+
+@pytest.mark.parametrize(
+    "exc,expected",
+    [
+        (TimeoutError("request timed out"), True),
+        (ConnectionError("connection reset"), True),
+        (Exception("[500] Something went wrong with the request."), True),
+        (Exception("[503] ResourceExhausted: Worker limit reached"), True),
+        (Exception("[429] Rate limit exceeded"), True),
+        (Exception("[404] Not Found"), False),
+        (ValueError("Invalid argument"), False),
+    ],
+)
+def test_is_transient_error_classification(exc, expected):
+    from rag.vector_store import is_transient_error
+
+    assert is_transient_error(exc) is expected
+
+
+def test_retry_transient_succeeds_after_transient_500(monkeypatch):
+    attempts = 0
+    monkeypatch.setattr("rag.vector_store.time.sleep", lambda _delay: None)
+    monkeypatch.setattr("rag.vector_store.random.uniform", lambda _a, _b: 0)
+
+    def flaky():
+        nonlocal attempts
+        attempts += 1
+        if attempts < 2:
+            raise Exception("[500] Something went wrong with the request.")
+        return "success"
+
+    result = retry_transient(flaky, max_attempts=3)
+    assert result == "success"
+    assert attempts == 2
+
