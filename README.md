@@ -1,8 +1,8 @@
-# AI Portfolio Knowledge Base // Interactive RAG Assistant
+# AI Portfolio Knowledge Base // Interactive RAG Assistant & FastAPI Backend
 
-An interactive, evidence-grounded Retrieval-Augmented Generation (RAG) knowledge base that indexes a candidate's complete professional corpus, including CVs, academic theses, project case studies, system architecture notes, and certifications. Built with **Streamlit**, **LangChain**, **NVIDIA AI Endpoints**, and **ChromaDB**.
+An interactive, evidence-grounded Retrieval-Augmented Generation (RAG) knowledge base that indexes a candidate's complete professional corpus, including CVs, academic theses, project case studies, system architecture notes, and certifications. Built with **FastAPI**, **Streamlit**, **LangChain**, **NVIDIA AI Endpoints**, and **ChromaDB**.
 
-Recruiters, hiring managers, and engineers can explore broad career highlights or deep technical project details simultaneously through natural conversation, receiving real-time streamed responses with verifiable document and page-level citations.
+Recruiters, hiring managers, and engineers can explore broad career highlights or deep technical project details simultaneously through an interactive web UI or a high-performance, OpenAI-compatible HTTP/SSE API with verifiable document and page-level citations.
 
 ---
 
@@ -13,20 +13,25 @@ Recruiters, hiring managers, and engineers can explore broad career highlights o
 - **Bullet-Aware Text Splitting**: Preserves resume formatting, technical lists, and project sections with tuned chunk sizes (`chunk_size=700`, `overlap=140`) to maintain semantic context continuity.
 - **Conversational Context Reformulation**: Automatically detects and reformulates pronoun-heavy follow-up questions (e.g., *"What technologies did he use for that project?"*) into standalone search queries using conversational history.
 - **Evidence-Grounded Streaming**: Synthesizes responses via Meta Llama 3.3 70B Instruct (`meta/llama-3.3-70b-instruct`) with strict evidence grounding and granular source citation expanders.
-- **100% Offline Test Suite**: Comprehensive mocked unit test suite that runs in seconds without making network requests or consuming API credits.
+- **FastAPI Production Backend**: Async, production-grade REST & SSE streaming API (`/v1/chat/completions`) with OpenAI compatibility, structured health checks (`/health/live`, `/health/ready`), CORS validation, body size caps, and concurrency throttling.
+- **100% Offline Test Suite**: Comprehensive mocked unit and integration test suite that runs in seconds without making network requests or consuming API credits.
 
 ---
 
 ## Architecture
 
 ```text
-Streamlit Web Interface
-       │
-       ▼
-  CVChatEngine (Session & Cache Manager)
-       ├── Multi-Document Ingestion (PDF / MD / TXT)
-       ├── Vector Store Manager (ChromaDB + NVIDIA Embeddings)
-       └── Conversational Synthesis (Prompt Injection Defense + NVIDIA Chat Endpoint)
+       ┌────────────────────────┐       ┌────────────────────────┐
+       │ Streamlit UI (Port 8501)│       │ FastAPI Backend (8000) │
+       │ (app.py)               │       │ (backend.app.main:app) │
+       └───────────┬────────────┘       └───────────┬────────────┘
+                   │                                │
+                   │       ┌────────────────────────┘
+                   ▼       ▼
+              CVChatEngine / RAGPipeline
+                   ├── Multi-Document Ingestion (PDF / MD / TXT)
+                   ├── Vector Store Manager (ChromaDB + NVIDIA Embeddings)
+                   └── Conversational Synthesis (Prompt Injection Defense + NVIDIA NIM)
 ```
 
 The RAG engine initializes on startup, builds or connects to the local ChromaDB index, and provides isolated session memory for each connected user.
@@ -79,10 +84,57 @@ documents/
 
 ### 4. Run the Application
 
-Start the Streamlit application:
+#### Option A: Run the FastAPI Backend
+
+Start the FastAPI HTTP & SSE service on port 8000:
+
+```powershell
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Interactive OpenAPI documentation is available at:
+- Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
+- ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+#### Option B: Run the Streamlit Frontend
+
+Start the interactive Streamlit chat interface on port 8501:
 
 ```powershell
 streamlit run app.py
+```
+
+#### Option C: Run Both Concurrently
+
+You can run both the FastAPI backend and Streamlit UI concurrently in separate terminals for full full-stack development.
+
+---
+
+## API Endpoints
+
+The FastAPI backend exposes the following REST and streaming endpoints:
+
+### Health Probes
+
+- **`GET /health/live`**: Liveness probe returning status `200 OK` with `{"status": "alive"}`.
+- **`GET /health/ready`**: Readiness probe returning status `200 OK` when the vector database and pipeline are fully initialized (`{"status": "ready", "pipeline_version": "dense-v1", "index_fingerprint": "..."}`), or `503 Service Unavailable` with detailed reason codes when initializing or degraded.
+
+### Chat Completions
+
+- **`POST /v1/chat/completions`**: OpenAI-compatible endpoint supporting both standard JSON responses and Server-Sent Events (SSE) streaming (`stream: true`).
+  
+#### Request Example (Streaming):
+
+```bash
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "meta/llama-3.3-70b-instruct",
+    "messages": [
+      {"role": "user", "content": "What is the candidate experience with Kubernetes and distributed systems?"}
+    ],
+    "stream": true
+  }'
 ```
 
 ---
@@ -101,13 +153,13 @@ streamlit run app.py
 Validate the codebase and run test suites:
 
 ```powershell
-# Verify syntax across all modules
-python -m compileall -q app.py rag tests test_pipeline.py ui
+# Verify syntax and compilation across all modules
+python -m compileall -q app.py backend rag tests test_pipeline.py ui
 
-# Run offline pytest suite (zero network calls)
-python -m pytest -q
+# Run offline pytest suite with isolated temporary directory (zero network calls)
+python -m pytest -q --basetemp=.pytest_tmp
 
-# Validate package dependencies
+# Validate package dependency consistency
 python -m pip check
 ```
 
