@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 from langchain_core.documents import Document
 
 from rag.errors import ProviderUnavailableError
+from rag.models import Citation
 from rag.presentation import citation_view, query_error_message
 
 
@@ -18,6 +21,21 @@ def test_citation_view_preserves_untrusted_text_as_data():
 
     assert view.label == "S2 · cv.pdf · page 2"
     assert view.excerpt == '<img src=x onerror="alert(1)">'
+
+
+def test_citation_view_with_citation_domain_model():
+    citation = Citation(
+        evidence_id="S1",
+        chunk_id="chunk-xyz",
+        source="cv.pdf",
+        page=3,
+        excerpt="Lead developer on multi-agent architectures.",
+    )
+
+    view = citation_view(citation)
+
+    assert view.label == "S1 · cv.pdf · page 3"
+    assert view.excerpt == "Lead developer on multi-agent architectures."
 
 
 def test_provider_failure_returns_retryable_safe_message():

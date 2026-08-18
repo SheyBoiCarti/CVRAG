@@ -1,35 +1,7 @@
-import hashlib
-import os
 from pathlib import Path
+from typing import ClassVar
 
-from dotenv import load_dotenv
-
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
-
-
-def _get_setting(key: str, default: str | None = None) -> str | None:
-    """Reads setting from os.environ with fallback to st.secrets for Streamlit deployments."""
-    val = os.getenv(key)
-    if val is not None and val != "":
-        return val
-    try:
-        import streamlit as st
-        if hasattr(st, "secrets") and key in st.secrets:
-            secret_val = st.secrets[key]
-            if secret_val is not None:
-                return str(secret_val)
-    except Exception:
-        pass
-    return default
-
-
-def _configured_path(name: str, default: Path) -> Path:
-    configured = Path(_get_setting(name, str(default)) or str(default))
-    if not configured.is_absolute():
-        configured = BASE_DIR / configured
-    return configured.resolve()
+from rag.settings import BASE_DIR, Settings, get_settings, make_collection_name
 
 
 class Config:
@@ -60,12 +32,7 @@ class Config:
     @classmethod
     def make_collection_name(cls) -> str:
         """Derives a deterministic Chroma collection name based on schema version and embedding model."""
-        fingerprint = hashlib.sha256(
-            f"{cls.INDEX_SCHEMA_VERSION}:{cls.EMBEDDING_MODEL}".encode("utf-8")
-        ).hexdigest()[:12]
-        return f"cv_documents_{fingerprint}"
-
-    COLLECTION_NAME = ""
+        return make_collection_name(cls.INDEX_SCHEMA_VERSION, cls.EMBEDDING_MODEL)
 
     @classmethod
     def validate_question(cls, question: str) -> str:
@@ -83,7 +50,7 @@ class Config:
     def validate(cls) -> None:
         """Validates critical runtime configuration before executing retrieval or generation."""
         if not cls.NVIDIA_API_KEY:
-            cls.NVIDIA_API_KEY = _get_setting("NVIDIA_API_KEY")
+            cls.NVIDIA_API_KEY = get_settings().NVIDIA_API_KEY
         if not cls.NVIDIA_API_KEY:
             raise ValueError("NVIDIA_API_KEY is not configured.")
         if cls.CHUNK_OVERLAP >= cls.CHUNK_SIZE:
@@ -95,4 +62,3 @@ class Config:
 
 
 Config.COLLECTION_NAME = Config.make_collection_name()
-

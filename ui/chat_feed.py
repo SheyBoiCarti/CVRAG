@@ -34,8 +34,9 @@ def render_chat_history(chat_history: list[tuple[Any, ...]]):
                 label = get_human_source_label(sources)
                 with st.expander(label):
                     for i, doc in enumerate(docs, 1):
+                        content = getattr(doc, "page_content", getattr(doc, "excerpt", str(doc)))
                         st.markdown(
-                            f"<div class='source-snippet'><div class='source-snippet-header'>Reference Snippet #{i}</div>{doc.page_content}</div>",
+                            f"<div class='source-snippet'><div class='source-snippet-header'>Reference Snippet #{i}</div>{content}</div>",
                             unsafe_allow_html=True,
                         )
 

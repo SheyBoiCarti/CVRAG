@@ -55,9 +55,10 @@ def test_partial_stream_is_not_replayed():
             raise TimeoutError("provider timeout")
 
     chain = BrokenChain()
-    chunks = list(CVChatEngine._stream_once(chain, {"question": "q"}))
-
-    assert chunks == ["Partial"]
+    gen = CVChatEngine._stream_once(chain, {"question": "q"})
+    assert next(gen) == "Partial"
+    with pytest.raises(TimeoutError):
+        next(gen)
     assert chain.calls == 1
 
 

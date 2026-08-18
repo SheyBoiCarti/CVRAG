@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from langchain_core.documents import Document
 
 from rag.errors import ProviderUnavailableError
+from rag.models import Citation
 
 
 PROVIDER_UNAVAILABLE_MESSAGE = (
@@ -20,13 +24,30 @@ class CitationView:
     excerpt: str
 
 
-def citation_view(document: Document) -> CitationView:
-    source = Path(str(document.metadata.get("source", "CV"))).name
-    page = int(document.metadata.get("page", 0)) + 1
-    evidence_id = str(document.metadata.get("evidence_id", "Source"))
+def citation_view(document: Document | Citation | Any) -> CitationView:
+    """Creates a presentation-ready citation view supporting both Document and Citation models."""
+    if isinstance(document, Citation):
+        source = Path(str(document.source or "CV")).name
+        page = int(document.page)
+        evidence_id = str(document.evidence_id or "Source")
+        excerpt = (document.excerpt or "").strip()
+        return CitationView(
+            label=f"{evidence_id} · {source} · page {page}",
+            excerpt=excerpt,
+        )
+
+    metadata = getattr(document, "metadata", {}) or {}
+    source = Path(str(metadata.get("source", "CV"))).name
+    raw_page = metadata.get("page", 0)
+    try:
+        page = int(raw_page) + 1
+    except (ValueError, TypeError):
+        page = 1
+    evidence_id = str(metadata.get("evidence_id", "Source"))
+    page_content = getattr(document, "page_content", getattr(document, "excerpt", "")) or ""
     return CitationView(
         label=f"{evidence_id} · {source} · page {page}",
-        excerpt=document.page_content.strip(),
+        excerpt=str(page_content).strip(),
     )
 
 
