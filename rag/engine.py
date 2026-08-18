@@ -13,6 +13,7 @@ from rag.config import Config
 from rag.document_loader import CVDocumentLoader
 from rag.errors import ProviderUnavailableError
 from rag.settings import Settings, get_settings
+from rag.retrieval.service import RetrievalService
 from rag.vector_store import VectorStoreManager, is_transient_error, retry_transient
 
 LOGGER = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ class CVChatEngine:
         loader: CVDocumentLoader | None = None,
         llm: Any | None = None,
         settings: Settings | None = None,
+        retrieval_service: RetrievalService | None = None,
     ):
         self.settings = settings or get_settings()
         if vector_manager is None or llm is None:
@@ -72,6 +74,7 @@ class CVChatEngine:
             max_completion_tokens=800,
             timeout=self.settings.REQUEST_TIMEOUT,
         )
+        self.retrieval_service = retrieval_service
         if auto_index:
             self.ensure_indexed()
 
@@ -95,6 +98,8 @@ class CVChatEngine:
 
     def ensure_indexed(self) -> int:
         """Indexes CV documents into ChromaDB if the collection is currently empty."""
+        if getattr(self, "retrieval_service", None) is not None:
+            return self.vector_manager.get_document_count()
         count = self.vector_manager.get_document_count()
         if count > 0:
             return count
@@ -188,9 +193,24 @@ class CVChatEngine:
             chat_history, max_turns=self.settings.MAX_HISTORY_TURNS
         )
         retrieval_query = self.prepare_retrieval_query(normalized_question, history)
-        raw_documents = self.vector_manager.similarity_search(
-            retrieval_query, k=k or self.settings.RETRIEVAL_K
-        )
+        retrieval_result = None
+        if self.retrieval_service is not None:
+            retrieval_result = self.retrieval_service.retrieve(retrieval_query)
+            raw_documents = [
+                Document(
+                    page_content=item.chunk.content,
+                    metadata={
+                        **dict(item.chunk.metadata), "chunk_id": item.chunk.chunk_id,
+                        "source": item.chunk.source, "page": item.chunk.page,
+                        "chunk_index": item.chunk.chunk_index,
+                    },
+                )
+                for item in retrieval_result.context
+            ]
+        else:
+            raw_documents = self.vector_manager.similarity_search(
+                retrieval_query, k=k or self.settings.RETRIEVAL_K
+            )
 
         # Deduplicate retrieved chunks while preserving ranked relevance order
         seen_ids: set[str] = set()
