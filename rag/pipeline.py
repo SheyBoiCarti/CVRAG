@@ -238,6 +238,169 @@ class RAGPipeline:
             pipeline_version=self.settings.PIPELINE_VERSION,
         )
 
+    def answer_with_trace(
+        self,
+        question: str,
+        history: Sequence[ChatTurn | tuple[str, str]] = (),
+        case_id: str = "",
+    ) -> tuple[AnswerResult, Any]:
+        """Answers question and captures structured diagnostic EvaluationTrace across pipeline stages."""
+        from evaluation.schema import EvaluationTrace
+        from rag.retrieval.base import ChunkRecord, RankedChunk
+        import time
+
+        start_total = time.perf_counter()
+        sanitized_question = self.settings.validate_question(question)
+        bounded_history = self._normalize_history(history)
+        engine = self._get_engine()
+
+        start_retrieval = time.perf_counter()
+        try:
+            prepared = engine.prepare_query(
+                sanitized_question,
+                bounded_history,
+                k=self.settings.RETRIEVAL_K,
+            )
+        except Exception as exc:
+            LOGGER.warning("Retrieval preparation failed (type=%s)", type(exc).__name__)
+            if is_transient_error(exc):
+                raise ProviderUnavailableError() from exc
+            raise
+        retrieval_ms = (time.perf_counter() - start_retrieval) * 1000.0
+
+        dense_results: tuple[RankedChunk, ...] = ()
+        sparse_results: tuple[RankedChunk, ...] = ()
+        fused_results: tuple[RankedChunk, ...] = ()
+        reranked_results: tuple[RankedChunk, ...] = ()
+        index_fingerprint = ""
+
+        ret_res = getattr(prepared, "retrieval_result", None)
+        if ret_res is not None:
+            dense_results = getattr(ret_res, "dense_candidates", ()) or ()
+            sparse_results = getattr(ret_res, "sparse_candidates", ()) or ()
+            fused_results = getattr(ret_res, "fused_candidates", ()) or ()
+            reranked_results = getattr(ret_res, "reranked_candidates", ()) or ()
+            index_fingerprint = getattr(ret_res, "index_fingerprint", "") or ""
+        else:
+            dense_results = tuple(
+                RankedChunk(
+                    chunk=ChunkRecord(
+                        chunk_id=str(doc.metadata.get("chunk_id", "")),
+                        content=doc.page_content,
+                        source=str(doc.metadata.get("source", "")),
+                        page=int(doc.metadata.get("page", 0)) + 1,
+                        chunk_index=int(doc.metadata.get("chunk_index", idx)),
+                        metadata=dict(doc.metadata),
+                    ),
+                    rank=idx + 1,
+                    score=None,
+                    methods=("dense",),
+                )
+                for idx, doc in enumerate(prepared.documents)
+            )
+
+        corpus_fingerprint = getattr(self.settings, "CORPUS_FINGERPRINT", "") or index_fingerprint or "default-corpus"
+        if not index_fingerprint:
+            index_fingerprint = corpus_fingerprint
+
+        if not prepared.documents:
+            total_ms = (time.perf_counter() - start_total) * 1000.0
+            ans_res = AnswerResult(
+                answer=NO_RESULTS_ANSWER,
+                citations=(),
+                claim_verifications=(),
+                decision="abstained",
+                reason_codes=("no_evidence",),
+                retrieval_query=prepared.retrieval_query,
+                pipeline_version=self.settings.PIPELINE_VERSION,
+            )
+            trace = EvaluationTrace(
+                case_id=case_id,
+                retrieval_query=prepared.retrieval_query,
+                dense_results=dense_results,
+                sparse_results=sparse_results,
+                fused_results=fused_results,
+                reranked_results=reranked_results,
+                answer_result=ans_res,
+                timings_ms={"retrieval_ms": retrieval_ms, "generation_ms": 0.0, "total_ms": total_ms},
+                token_usage={},
+                configuration={
+                    "RETRIEVAL_MODE": self.settings.RETRIEVAL_MODE,
+                    "RERANK_ENABLED": self.settings.RERANK_ENABLED,
+                    "RETRIEVAL_K": self.settings.RETRIEVAL_K,
+                    "DENSE_CANDIDATE_K": self.settings.DENSE_CANDIDATE_K,
+                    "SPARSE_CANDIDATE_K": self.settings.SPARSE_CANDIDATE_K,
+                    "FUSION_CANDIDATE_K": self.settings.FUSION_CANDIDATE_K,
+                    "CHUNK_SIZE": self.settings.CHUNK_SIZE,
+                    "CHUNK_OVERLAP": self.settings.CHUNK_OVERLAP,
+                    "LLM_MODEL": str(self.settings.LLM_MODEL),
+                    "EMBEDDING_MODEL": str(self.settings.EMBEDDING_MODEL),
+                },
+                corpus_fingerprint=corpus_fingerprint,
+                index_fingerprint=index_fingerprint,
+            )
+            return ans_res, trace
+
+        start_gen = time.perf_counter()
+        chain = engine.prompt | engine.llm | StrOutputParser()
+        payload = {
+            "context": prepared.context,
+            "chat_history": prepared.history_messages,
+            "question": prepared.question,
+        }
+        try:
+            raw_answer = retry_transient(
+                lambda: chain.invoke(payload),
+                self.settings.MAX_RETRIES,
+                operation_name="chat_generation",
+                model=str(self.settings.LLM_MODEL),
+            )
+        except Exception as exc:
+            if is_transient_error(exc):
+                raise ProviderUnavailableError() from exc
+            raise
+        generation_ms = (time.perf_counter() - start_gen) * 1000.0
+        total_ms = (time.perf_counter() - start_total) * 1000.0
+
+        cited_docs = engine.cited_documents(raw_answer, prepared.documents)
+        citations = self._build_citations(cited_docs)
+
+        ans_res = AnswerResult(
+            answer=raw_answer,
+            citations=citations,
+            claim_verifications=(),
+            decision="answered",
+            reason_codes=(),
+            retrieval_query=prepared.retrieval_query,
+            pipeline_version=self.settings.PIPELINE_VERSION,
+        )
+        trace = EvaluationTrace(
+            case_id=case_id,
+            retrieval_query=prepared.retrieval_query,
+            dense_results=dense_results,
+            sparse_results=sparse_results,
+            fused_results=fused_results,
+            reranked_results=reranked_results,
+            answer_result=ans_res,
+            timings_ms={"retrieval_ms": retrieval_ms, "generation_ms": generation_ms, "total_ms": total_ms},
+            token_usage={},
+            configuration={
+                "RETRIEVAL_MODE": self.settings.RETRIEVAL_MODE,
+                "RERANK_ENABLED": self.settings.RERANK_ENABLED,
+                "RETRIEVAL_K": self.settings.RETRIEVAL_K,
+                "DENSE_CANDIDATE_K": self.settings.DENSE_CANDIDATE_K,
+                "SPARSE_CANDIDATE_K": self.settings.SPARSE_CANDIDATE_K,
+                "FUSION_CANDIDATE_K": self.settings.FUSION_CANDIDATE_K,
+                "CHUNK_SIZE": self.settings.CHUNK_SIZE,
+                "CHUNK_OVERLAP": self.settings.CHUNK_OVERLAP,
+                "LLM_MODEL": str(self.settings.LLM_MODEL),
+                "EMBEDDING_MODEL": str(self.settings.EMBEDDING_MODEL),
+            },
+            corpus_fingerprint=corpus_fingerprint,
+            index_fingerprint=index_fingerprint,
+        )
+        return ans_res, trace
+
     def stream(
         self,
         question: str,

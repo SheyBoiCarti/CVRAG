@@ -26,6 +26,9 @@ class RetrievalResult:
     fused_candidates: tuple[RankedChunk, ...]
     degraded_reason_codes: tuple[str, ...]
     index_fingerprint: str
+    dense_candidates: tuple[RankedChunk, ...] = ()
+    sparse_candidates: tuple[RankedChunk, ...] = ()
+    reranked_candidates: tuple[RankedChunk, ...] = ()
 
 
 class RetrievalService:
@@ -41,6 +44,7 @@ class RetrievalService:
     def retrieve(self, query: str) -> RetrievalResult:
         degraded: list[str] = []
         dense = self._search("dense", self.dense_retriever, query, self.settings.DENSE_CANDIDATE_K, degraded)
+        sparse: list[RankedChunk] = []
         if self.settings.RETRIEVAL_MODE == "dense":
             candidates = dense
         else:
@@ -55,9 +59,11 @@ class RetrievalService:
             )
         fused = tuple(candidates)
         final = list(candidates)
+        reranked: list[RankedChunk] = []
         if self.settings.RERANK_ENABLED and final:
             try:
                 final = self.reranker.rerank(query, final[:self.settings.RERANK_CANDIDATE_K], self.settings.CONTEXT_K)
+                reranked = list(final)
             except Exception as exc:
                 if not is_transient_error(exc):
                     raise
@@ -66,7 +72,16 @@ class RetrievalService:
                 final = final[:self.settings.CONTEXT_K]
         else:
             final = final[:self.settings.CONTEXT_K]
-        return RetrievalResult(query, tuple(final), fused, tuple(degraded), self.index_fingerprint)
+        return RetrievalResult(
+            query=query,
+            context=tuple(final),
+            fused_candidates=fused,
+            degraded_reason_codes=tuple(degraded),
+            index_fingerprint=self.index_fingerprint,
+            dense_candidates=tuple(dense),
+            sparse_candidates=tuple(sparse),
+            reranked_candidates=tuple(reranked),
+        )
 
     @staticmethod
     def _search(name: str, retriever: Retriever, query: str, k: int, degraded: list[str]) -> list[RankedChunk]:

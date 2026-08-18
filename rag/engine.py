@@ -31,12 +31,14 @@ class PreparedQuery:
         history_messages: list[tuple[str, str]],
         documents: list[Document],
         context: str,
+        retrieval_result: Any | None = None,
     ) -> None:
         self.question = question
         self.retrieval_query = retrieval_query
         self.history_messages = history_messages
         self.documents = documents
         self.context = context
+        self.retrieval_result = retrieval_result
 
 
 class CVChatEngine:
@@ -234,6 +236,7 @@ class CVChatEngine:
             history_messages=self._history_messages(history),
             documents=documents,
             context=self.format_docs(documents),
+            retrieval_result=retrieval_result,
         )
 
     def query(
