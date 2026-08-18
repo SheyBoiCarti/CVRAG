@@ -69,6 +69,50 @@ class _ConfigMeta(type):
         return cls._overrides.get("RETRIEVAL_K", cls._get_settings().RETRIEVAL_K)
 
     @property
+    def RETRIEVAL_MODE(cls) -> str:
+        return cls._overrides.get("RETRIEVAL_MODE", cls._get_settings().RETRIEVAL_MODE)
+
+    @property
+    def DENSE_CANDIDATE_K(cls) -> int:
+        return cls._overrides.get("DENSE_CANDIDATE_K", cls._get_settings().DENSE_CANDIDATE_K)
+
+    @property
+    def SPARSE_CANDIDATE_K(cls) -> int:
+        return cls._overrides.get("SPARSE_CANDIDATE_K", cls._get_settings().SPARSE_CANDIDATE_K)
+
+    @property
+    def FUSION_CANDIDATE_K(cls) -> int:
+        return cls._overrides.get("FUSION_CANDIDATE_K", cls._get_settings().FUSION_CANDIDATE_K)
+
+    @property
+    def CONTEXT_K(cls) -> int:
+        return cls._overrides.get("CONTEXT_K", cls._get_settings().CONTEXT_K)
+
+    @property
+    def RRF_CONSTANT(cls) -> int:
+        return cls._overrides.get("RRF_CONSTANT", cls._get_settings().RRF_CONSTANT)
+
+    @property
+    def DENSE_RRF_WEIGHT(cls) -> float:
+        return cls._overrides.get("DENSE_RRF_WEIGHT", cls._get_settings().DENSE_RRF_WEIGHT)
+
+    @property
+    def SPARSE_RRF_WEIGHT(cls) -> float:
+        return cls._overrides.get("SPARSE_RRF_WEIGHT", cls._get_settings().SPARSE_RRF_WEIGHT)
+
+    @property
+    def RERANK_ENABLED(cls) -> bool:
+        return cls._overrides.get("RERANK_ENABLED", cls._get_settings().RERANK_ENABLED)
+
+    @property
+    def RERANK_MODEL(cls) -> str:
+        return cls._overrides.get("RERANK_MODEL", cls._get_settings().RERANK_MODEL)
+
+    @property
+    def RERANK_CANDIDATE_K(cls) -> int:
+        return cls._overrides.get("RERANK_CANDIDATE_K", cls._get_settings().RERANK_CANDIDATE_K)
+
+    @property
     def MAX_QUESTION_CHARS(cls) -> int:
         return cls._overrides.get("MAX_QUESTION_CHARS", cls._get_settings().MAX_QUESTION_CHARS)
 

@@ -23,3 +23,9 @@ def test_collection_name_changes_with_schema_or_embedding(monkeypatch):
     original = Config.COLLECTION_NAME
     monkeypatch.setattr(Config, "INDEX_SCHEMA_VERSION", "v99")
     assert Config.make_collection_name() != original
+
+
+def test_config_exposes_hybrid_retrieval_settings(monkeypatch):
+    """Legacy Config callers can opt into the same retrieval mode as Settings callers."""
+    monkeypatch.setenv("RETRIEVAL_MODE", "hybrid")
+    assert Config.RETRIEVAL_MODE == "hybrid"
