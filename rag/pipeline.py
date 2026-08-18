@@ -70,6 +70,35 @@ class RAGPipeline:
             self._engine = self._build_engine()
         return self._engine
 
+    @property
+    def engine(self) -> CVChatEngine:
+        """Returns the active underlying CVChatEngine."""
+        return self._get_engine()
+
+    def prepare_query(
+        self,
+        question: str,
+        chat_history: Sequence[ChatTurn | tuple[str, str]] = (),
+        k: int | None = None,
+    ):
+        """Prepares retrieval context and reformulation for a question."""
+        sanitized_question = self.settings.validate_question(question)
+        bounded_history = self._normalize_history(chat_history)
+        effective_k = k if k is not None else self.settings.RETRIEVAL_K
+        return self._get_engine().prepare_query(
+            sanitized_question,
+            bounded_history,
+            k=effective_k,
+        )
+
+    def stream_prepared(self, prepared: Any) -> Iterator[str]:
+        """Streams token chunks for a prepared query."""
+        return self._get_engine().stream_prepared(prepared)
+
+    def cited_documents(self, answer: str, documents: Sequence[Any]) -> list[Any]:
+        """Identifies cited documents from answer text."""
+        return self._get_engine().cited_documents(answer, documents)
+
     def _normalize_history(
         self,
         history: Sequence[ChatTurn | tuple[str, str] | dict[str, str]] = (),

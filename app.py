@@ -1,15 +1,16 @@
 import logging
-import sys
+import os
 from pathlib import Path
+import sys
 import streamlit as st
 
 # Ensure repository root is on sys.path for direct 'streamlit run app.py' invocation
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from rag.config import Config
-from rag.engine import CVChatEngine, NO_RESULTS_ANSWER
+from rag.engine import NO_RESULTS_ANSWER
+from rag.pipeline import RAGPipeline
 from rag.presentation import query_error_message
-from rag.runtime import get_engine
+from rag.runtime import get_pipeline, load_streamlit_secrets_into_environ
 from rag.vector_store import provider_error_details
 from ui.chat_feed import get_human_source_label, render_chat_history
 from ui.header import render_header
@@ -17,6 +18,8 @@ from ui.hero import render_hero
 from ui.sidebar import render_sidebar
 from ui.styles import inject_custom_css
 
+# Preload any streamlit secrets into environment variables
+load_streamlit_secrets_into_environ()
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,17 +38,16 @@ if "chat_history" not in st.session_state:
 
 try:
     with st.spinner("Initializing AI engine..."):
-        engine: CVChatEngine = get_engine(
-            Config.LLM_MODEL or "",
-            Config.EMBEDDING_MODEL or "",
-            Config.COLLECTION_NAME,
-        )
+        pipeline: RAGPipeline = get_pipeline()
+        # Verify vector manager / engine initialization
+        _ = pipeline.engine
 except Exception as exc:
     status, detail = provider_error_details(exc)
+    emb_model = getattr(getattr(pipeline, "settings", None), "EMBEDDING_MODEL", "unknown") if "pipeline" in locals() else "unknown"
     LOGGER.error(
         "AI engine initialization failed (embedding_model=%s, status=%s, "
         "type=%s, detail=%s)",
-        Config.EMBEDDING_MODEL,
+        emb_model,
         status if status is not None else "unknown",
         type(exc).__name__,
         detail,
@@ -79,7 +81,7 @@ if active_query:
             history_tuples = [(h[0], h[1]) for h in st.session_state.chat_history[-4:]]
 
             with st.spinner("Searching CV..."):
-                prepared = engine.prepare_query(
+                prepared = pipeline.prepare_query(
                     question=active_query, chat_history=history_tuples
                 )
 
@@ -87,7 +89,7 @@ if active_query:
             if retrieved_docs:
                 stage = "generation"
                 with st.spinner("Generating answer..."):
-                    answer = st.write_stream(engine.stream_prepared(prepared))
+                    answer = st.write_stream(pipeline.stream_prepared(prepared))
             else:
                 answer = NO_RESULTS_ANSWER
                 st.markdown(answer)
@@ -103,8 +105,9 @@ if active_query:
                 label = get_human_source_label(sources)
                 with st.expander(label):
                     for i, doc in enumerate(retrieved_docs, 1):
+                        content = getattr(doc, "page_content", getattr(doc, "excerpt", str(doc)))
                         st.markdown(
-                            f"<div class='source-snippet'><div class='source-snippet-header'>Reference Snippet #{i}</div>{doc.page_content}</div>",
+                            f"<div class='source-snippet'><div class='source-snippet-header'>Reference Snippet #{i}</div>{content}</div>",
                             unsafe_allow_html=True,
                         )
         except Exception as exc:
