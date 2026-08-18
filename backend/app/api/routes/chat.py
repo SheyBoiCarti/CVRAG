@@ -345,7 +345,10 @@ async def chat_stream(
                 if stop_event.is_set():
                     LOGGER.debug("Worker received stop signal, aborting stream (request_id=%s)", req_id)
                     break
-                loop.call_soon_threadsafe(queue.put_nowait, event)
+                try:
+                    loop.call_soon_threadsafe(queue.put_nowait, event)
+                except RuntimeError:
+                    break
         except Exception as exc:
             LOGGER.warning(
                 "Unhandled exception in streaming worker thread (request_id=%s, type=%s): %s",
@@ -354,9 +357,15 @@ async def chat_stream(
                 exc,
             )
             if not stop_event.is_set():
-                loop.call_soon_threadsafe(queue.put_nowait, exc)
+                try:
+                    loop.call_soon_threadsafe(queue.put_nowait, exc)
+                except RuntimeError:
+                    pass
         finally:
-            loop.call_soon_threadsafe(queue.put_nowait, _SENTINEL)
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, _SENTINEL)
+            except RuntimeError:
+                pass
 
     worker_thread = threading.Thread(
         target=run_worker,
