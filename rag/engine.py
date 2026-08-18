@@ -69,7 +69,7 @@ class CVChatEngine:
             api_key=self.settings.NVIDIA_API_KEY,
             temperature=0.2,
             top_p=0.7,
-            max_tokens=800,
+            max_completion_tokens=800,
             timeout=self.settings.REQUEST_TIMEOUT,
         )
         if auto_index:

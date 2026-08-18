@@ -60,7 +60,7 @@ class LiveProviderFactories:
             api_key=settings.NVIDIA_API_KEY,
             temperature=0.2,
             top_p=0.7,
-            max_tokens=800,
+            max_completion_tokens=800,
             timeout=settings.REQUEST_TIMEOUT,
         )
 

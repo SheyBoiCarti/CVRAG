@@ -82,7 +82,7 @@ async def parse_and_validate_chat_payload(
             cl = int(content_length)
             if cl > settings.API_MAX_BODY_BYTES:
                 raise HTTPException(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                     detail={
                         "code": "request_too_large",
                         "message": f"Request body size ({cl} bytes) exceeds limit of {settings.API_MAX_BODY_BYTES} bytes.",
@@ -95,7 +95,7 @@ async def parse_and_validate_chat_payload(
     body = await request.body()
     if len(body) > settings.API_MAX_BODY_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail={
                 "code": "request_too_large",
                 "message": f"Request body size ({len(body)} bytes) exceeds limit of {settings.API_MAX_BODY_BYTES} bytes.",
@@ -107,7 +107,7 @@ async def parse_and_validate_chat_payload(
         data = json.loads(body.decode("utf-8"))
     except Exception:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "validation_error",
                 "message": "Malformed JSON payload.",
@@ -117,7 +117,7 @@ async def parse_and_validate_chat_payload(
 
     if not isinstance(data, dict):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "validation_error",
                 "message": "Request payload must be a JSON object.",
@@ -127,7 +127,7 @@ async def parse_and_validate_chat_payload(
 
     if "question" not in data or not isinstance(data["question"], str):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "invalid_question",
                 "message": "Field 'question' is required and must be a string.",
@@ -138,7 +138,7 @@ async def parse_and_validate_chat_payload(
     raw_question = data["question"]
     if not raw_question.strip():
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "invalid_question",
                 "message": "Question cannot be empty or whitespace-only.",
@@ -148,7 +148,7 @@ async def parse_and_validate_chat_payload(
 
     if len(raw_question) > settings.MAX_QUESTION_CHARS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "invalid_question",
                 "message": f"Question exceeds maximum length of {settings.MAX_QUESTION_CHARS} characters.",
@@ -159,7 +159,7 @@ async def parse_and_validate_chat_payload(
     raw_history = data.get("history", [])
     if not isinstance(raw_history, list):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "invalid_history",
                 "message": "Field 'history' must be a list of chat turn objects.",
@@ -169,7 +169,7 @@ async def parse_and_validate_chat_payload(
 
     if len(raw_history) > 20:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "invalid_history",
                 "message": f"History length cannot exceed 20 turns (received {len(raw_history)}).",
@@ -181,7 +181,7 @@ async def parse_and_validate_chat_payload(
     for idx, turn in enumerate(raw_history):
         if not isinstance(turn, dict) or "user" not in turn or "assistant" not in turn:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={
                     "code": "invalid_history",
                     "message": f"History turn at index {idx} must be an object containing 'user' and 'assistant'.",
@@ -190,7 +190,7 @@ async def parse_and_validate_chat_payload(
             )
         if not isinstance(turn["user"], str) or not isinstance(turn["assistant"], str):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={
                     "code": "invalid_history",
                     "message": f"History turn at index {idx} must contain string values for 'user' and 'assistant'.",
