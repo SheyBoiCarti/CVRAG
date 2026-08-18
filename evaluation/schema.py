@@ -42,9 +42,21 @@ def _immutable_mapping(values: Mapping[str, Any] | None) -> Mapping[str, Any]:
     return MappingProxyType(dict(values or {}))
 
 
+def _serialize_for_json(val: Any) -> Any:
+    """Recursively serializes models, mappings, and sequences for standard JSON."""
+    if hasattr(val, "to_dict") and callable(val.to_dict):
+        return _serialize_for_json(val.to_dict())
+    if isinstance(val, Mapping):
+        return {str(k): _serialize_for_json(v) for k, v in val.items()}
+    if isinstance(val, (list, tuple, set)):
+        return [_serialize_for_json(v) for v in val]
+    return val
+
+
 def canonical_json_dumps(obj: Any) -> str:
     """Serializes a Python object to canonical JSON with sorted keys, no whitespace, and UTF-8."""
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    serializable = _serialize_for_json(obj)
+    return json.dumps(serializable, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def compute_content_hash(content: Mapping[str, Any] | dict[str, Any]) -> str:
@@ -306,8 +318,8 @@ class RunArtifact:
     def to_dict(self) -> dict[str, Any]:
         return {
             "content_fingerprint": self.content_fingerprint,
-            "content": dict(self.content),
-            "run_metadata": dict(self.run_metadata),
+            "content": _serialize_for_json(self.content),
+            "run_metadata": _serialize_for_json(self.run_metadata),
         }
 
     def save(self, filepath: str | Any) -> None:
