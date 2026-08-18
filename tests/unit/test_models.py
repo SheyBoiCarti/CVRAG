@@ -272,15 +272,32 @@ def test_pipeline_event_creation_and_immutability():
 
     # Test SSE formatting helper
     sse_str = event2.to_sse()
-    assert sse_str.startswith("event: generation_started\n")
-    assert "data: " in sse_str
+    assert sse_str.startswith("data: ")
     assert sse_str.endswith("\n\n")
-    parsed_json = json.loads(sse_str.split("data: ")[1].strip())
+    parsed_json = json.loads(sse_str.removeprefix("data: ").strip())
     assert parsed_json["schema_version"] == "1"
     assert parsed_json["request_id"] == "req-12345"
     assert parsed_json["sequence"] == 2
     assert parsed_json["event"] == "generation_started"
     assert parsed_json["data"] == {"model": "llama-3.3-70b"}
+
+    # Test nested AnswerResult serialization in event
+    ans_res = AnswerResult(
+        answer="Completed.",
+        citations=(Citation("S1", "c1", "cv.md", 1, "excerpt"),),
+        decision="answered",
+    )
+    terminal_event = PipelineEvent.create(
+        event="answer_completed",
+        data={"result": ans_res, "replace_streamed_answer": False},
+        request_id="req-999",
+        sequence=3,
+    )
+    json_str = terminal_event.to_json()
+    assert "Completed." in json_str
+    assert "cv.md" in json_str
+    sse_terminal = terminal_event.to_sse()
+    assert sse_terminal.startswith("data: {")
 
 
 def test_no_external_dependencies_in_models():

@@ -305,3 +305,58 @@ def test_get_pipeline_raises_503_when_uninitialized(tmp_path: Path) -> None:
         assert res.status_code == 503
         payload = res.json()
         assert payload["error"]["code"] == "pipeline_not_ready"
+
+
+def test_create_app_tolerates_invalid_settings_environment_and_serves_liveness(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Invalid environment variables do not crash create_app; liveness serves 200 while readiness returns 503."""
+    monkeypatch.setenv("MAX_RETRIES", "-1")
+    app = create_app()
+    with TestClient(app) as client:
+        live_res = client.get("/api/v1/health/live")
+        assert live_res.status_code == 200
+        assert live_res.json() == {"status": "live"}
+
+        ready_res = client.get("/api/v1/health/ready")
+        assert ready_res.status_code == 503
+        ready_payload = ready_res.json()
+        assert ready_payload["state"] == "not_ready"
+        assert "invalid_settings" in ready_payload["reason_codes"]
+
+
+def test_create_app_with_fake_provider_factories_without_credentials(tmp_path: Path) -> None:
+    """Fake provider factories allow create_app to instantiate and index pipeline without NVIDIA_API_KEY."""
+    doc_dir = tmp_path / "docs"
+    doc_dir.mkdir(parents=True, exist_ok=True)
+    (doc_dir / "sample.txt").write_text("Candidate has 10 years of Python experience.", encoding="utf-8")
+    settings = Settings(
+        NVIDIA_API_KEY=None,
+        DOCUMENTS_DIR=doc_dir,
+        VECTOR_DB_DIR=tmp_path / "vdb",
+    )
+    fake_factories = FakeProviderFactories(default_response="Mock answer.")
+    app = create_app(settings=settings, provider_factories=fake_factories)
+    with TestClient(app) as client:
+        ready_res = client.get("/api/v1/health/ready")
+        assert ready_res.status_code == 200
+        assert ready_res.json()["state"] == "ready"
+
+
+def test_openapi_schema_documents_request_body_and_error_responses() -> None:
+    """OpenAPI schema contains requestBody for chat endpoints and documents 413, 422, and 503 responses."""
+    app = create_app(settings=Settings(NVIDIA_API_KEY="mock"))
+    openapi = app.openapi()
+    paths = openapi["paths"]
+
+    assert "/api/v1/chat" in paths
+    chat_post = paths["/api/v1/chat"]["post"]
+    assert "requestBody" in chat_post
+    assert "413" in chat_post["responses"]
+    assert "422" in chat_post["responses"]
+    assert "503" in chat_post["responses"]
+
+    assert "/api/v1/chat/stream" in paths
+    stream_post = paths["/api/v1/chat/stream"]["post"]
+    assert "requestBody" in stream_post
+    assert "413" in stream_post["responses"]
+    assert "422" in stream_post["responses"]
+    assert "503" in stream_post["responses"]

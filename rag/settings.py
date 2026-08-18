@@ -84,8 +84,8 @@ class Settings:
             raise ValueError("MAX_HISTORY_TURNS must be between 1 and 20.")
         if self.REQUEST_TIMEOUT <= 0:
             raise ValueError("REQUEST_TIMEOUT must be positive.")
-        if self.MAX_RETRIES < 0:
-            raise ValueError("MAX_RETRIES cannot be negative.")
+        if self.MAX_RETRIES <= 0:
+            raise ValueError("MAX_RETRIES must be positive.")
         if self.EMBEDDING_BATCH_SIZE <= 0:
             raise ValueError("EMBEDDING_BATCH_SIZE must be positive.")
         if self.API_MAX_BODY_BYTES <= 0:

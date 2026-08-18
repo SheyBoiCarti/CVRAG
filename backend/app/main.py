@@ -28,7 +28,15 @@ def create_app(
     provider_factories: ProviderFactories | None = None,
 ) -> FastAPI:
     """Creates and configures a FastAPI application instance."""
-    resolved_settings = settings or get_settings()
+    settings_error: str | None = None
+    if settings is None:
+        try:
+            resolved_settings = get_settings()
+        except Exception:
+            settings_error = "invalid_settings"
+            resolved_settings = Settings()
+    else:
+        resolved_settings = settings
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -38,7 +46,14 @@ def create_app(
             resolved_settings.API_MAX_CONCURRENT_GENERATIONS
         )
 
-        if pipeline is not None:
+        if settings_error is not None:
+            LOGGER.warning("Application booted with invalid configuration: %s", settings_error)
+            app.state.pipeline = None
+            app.state.readiness_state = "not_ready"
+            app.state.readiness_reason_codes = [settings_error]
+            app.state.pipeline_version = resolved_settings.PIPELINE_VERSION
+            app.state.index_fingerprint = None
+        elif pipeline is not None:
             app.state.pipeline = pipeline
             try:
                 readiness = pipeline.readiness()
@@ -47,14 +62,14 @@ def create_app(
                 app.state.pipeline_version = readiness.pipeline_version
                 app.state.index_fingerprint = readiness.index_fingerprint
             except Exception as exc:
-                LOGGER.warning("Readiness check failed during startup: %s", exc)
+                LOGGER.warning("Readiness check failed during startup (type=%s)", type(exc).__name__)
                 app.state.readiness_state = "not_ready"
                 app.state.readiness_reason_codes = ["pipeline_not_ready"]
                 app.state.pipeline_version = resolved_settings.PIPELINE_VERSION
                 app.state.index_fingerprint = None
         else:
             try:
-                if not resolved_settings.NVIDIA_API_KEY:
+                if provider_factories is None and not resolved_settings.NVIDIA_API_KEY:
                     LOGGER.info(
                         "NVIDIA_API_KEY is not configured; starting in degraded not_ready state."
                     )
@@ -75,7 +90,7 @@ def create_app(
                     app.state.pipeline_version = readiness.pipeline_version
                     app.state.index_fingerprint = readiness.index_fingerprint
             except Exception as exc:
-                LOGGER.warning("Pipeline initialization failed during startup: %s", exc)
+                LOGGER.warning("Pipeline initialization failed during startup (type=%s)", type(exc).__name__)
                 app.state.pipeline = None
                 app.state.readiness_state = "not_ready"
                 app.state.readiness_reason_codes = ["pipeline_not_ready"]
@@ -132,7 +147,7 @@ def create_app(
     ) -> JSONResponse:
         error_resp = ErrorResponse(
             error=ErrorDetail(
-                code="rag_error",
+                code="internal_error",
                 message="An internal RAG pipeline error occurred.",
                 retryable=False,
             )
@@ -175,15 +190,19 @@ def create_app(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         sanitized_errors = []
+        is_history_error = False
         for err in exc.errors():
             loc = [str(item) for item in err.get("loc", ())]
+            if "history" in loc:
+                is_history_error = True
             msg = str(err.get("msg", "Invalid value"))
             err_type = str(err.get("type", "value_error"))
             sanitized_errors.append({"loc": loc, "msg": msg, "type": err_type})
 
+        err_code = "invalid_history" if is_history_error else "invalid_question"
         error_resp = ErrorResponse(
             error=ErrorDetail(
-                code="validation_error",
+                code=err_code,
                 message="Invalid request payload.",
                 retryable=False,
                 details={"errors": sanitized_errors},
@@ -198,7 +217,7 @@ def create_app(
     async def generic_exception_handler(
         request: Request, exc: Exception
     ) -> JSONResponse:
-        LOGGER.exception("Unhandled server exception: %s", exc)
+        LOGGER.warning("Unhandled server exception (type=%s)", type(exc).__name__)
         error_resp = ErrorResponse(
             error=ErrorDetail(
                 code="internal_error",

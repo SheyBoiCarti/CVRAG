@@ -25,8 +25,25 @@ def _is_ingestible(path: Path) -> bool:
 class CVDocumentLoader:
     """Loads and chunks CV documents from the configured documents directory."""
 
-    def __init__(self, documents_dir: Path | None = None):
-        self.documents_dir = Path(documents_dir or Config.DOCUMENTS_DIR)
+    def __init__(
+        self,
+        documents_dir: Path | None = None,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
+        settings: Any | None = None,
+    ):
+        if settings is not None:
+            self.documents_dir = Path(documents_dir or settings.DOCUMENTS_DIR)
+            self.chunk_size = chunk_size or settings.CHUNK_SIZE
+            self.chunk_overlap = (
+                chunk_overlap if chunk_overlap is not None else settings.CHUNK_OVERLAP
+            )
+        else:
+            self.documents_dir = Path(documents_dir or Config.DOCUMENTS_DIR)
+            self.chunk_size = chunk_size or Config.CHUNK_SIZE
+            self.chunk_overlap = (
+                chunk_overlap if chunk_overlap is not None else Config.CHUNK_OVERLAP
+            )
 
     def load_documents(self) -> list[Document]:
         """Reads all ingestible CV files from disk and returns Document objects."""
@@ -81,8 +98,8 @@ class CVDocumentLoader:
         """Splits documents into overlapping chunks with bullet-aware separators and deterministic IDs."""
         # Include bullet markers in separators to avoid breaking resume lists mid-sentence
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=Config.CHUNK_SIZE,
-            chunk_overlap=Config.CHUNK_OVERLAP,
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
             separators=["\n\n", "\n• ", "\n- ", "\n", " ", ""],
         )
         chunks = splitter.split_documents(documents)

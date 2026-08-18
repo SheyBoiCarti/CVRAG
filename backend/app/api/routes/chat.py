@@ -6,11 +6,12 @@ import asyncio
 import json
 import logging
 from pathlib import Path
+import queue
 import threading
 from typing import Any, Sequence
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
@@ -20,6 +21,7 @@ from backend.app.api.schemas.chat import (
     CitationSchema,
     ClaimVerificationSchema,
 )
+from backend.app.api.schemas.common import ErrorResponse
 from backend.app.dependencies import (
     get_generation_semaphore,
     get_pipeline,
@@ -34,30 +36,9 @@ LOGGER = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _serialize_for_json(obj: Any) -> Any:
-    """Recursively serializes domain models, dataclasses, dicts, and sequences for SSE JSON payload."""
-    if hasattr(obj, "to_dict") and callable(obj.to_dict):
-        return _serialize_for_json(obj.to_dict())
-    if isinstance(obj, dict):
-        d = {k: _serialize_for_json(v) for k, v in obj.items()}
-        if "source" in d and isinstance(d["source"], str) and "evidence_id" in d:
-            d["source"] = Path(d["source"]).name
-        return d
-    if isinstance(obj, (list, tuple)):
-        return [_serialize_for_json(item) for item in obj]
-    return obj
-
-
 def format_sse_event(event: PipelineEvent) -> str:
     """Formats a PipelineEvent envelope into standard SSE wire format: `data: {...}\\n\\n`."""
-    payload = {
-        "schema_version": event.schema_version,
-        "request_id": event.request_id,
-        "sequence": event.sequence,
-        "event": event.event,
-        "data": _serialize_for_json(event.data),
-    }
-    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+    return event.to_sse()
 
 
 async def parse_and_validate_chat_payload(
@@ -66,7 +47,7 @@ async def parse_and_validate_chat_payload(
 ) -> tuple[str, list[ChatTurn]]:
     """Parses and validates the incoming chat request body.
 
-    Enforces size limits (API_MAX_BODY_BYTES), question constraints,
+    Enforces size limits (API_MAX_BODY_BYTES) while streaming chunks, question constraints,
     and conversational history length/schema bounds.
 
     Returns:
@@ -92,16 +73,22 @@ async def parse_and_validate_chat_payload(
         except ValueError:
             pass
 
-    body = await request.body()
-    if len(body) > settings.API_MAX_BODY_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail={
-                "code": "request_too_large",
-                "message": f"Request body size ({len(body)} bytes) exceeds limit of {settings.API_MAX_BODY_BYTES} bytes.",
-                "retryable": False,
-            },
-        )
+    chunks: list[bytes] = []
+    total_bytes = 0
+    async for chunk in request.stream():
+        total_bytes += len(chunk)
+        if total_bytes > settings.API_MAX_BODY_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail={
+                    "code": "request_too_large",
+                    "message": f"Request body size exceeds limit of {settings.API_MAX_BODY_BYTES} bytes.",
+                    "retryable": False,
+                },
+            )
+        chunks.append(chunk)
+
+    body = b"".join(chunks)
 
     try:
         data = json.loads(body.decode("utf-8"))
@@ -109,7 +96,7 @@ async def parse_and_validate_chat_payload(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
-                "code": "validation_error",
+                "code": "invalid_question",
                 "message": "Malformed JSON payload.",
                 "retryable": False,
             },
@@ -119,7 +106,7 @@ async def parse_and_validate_chat_payload(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
-                "code": "validation_error",
+                "code": "invalid_question",
                 "message": "Request payload must be a JSON object.",
                 "retryable": False,
             },
@@ -136,7 +123,8 @@ async def parse_and_validate_chat_payload(
         )
 
     raw_question = data["question"]
-    if not raw_question.strip():
+    normalized_question = raw_question.strip()
+    if not normalized_question:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
@@ -146,7 +134,7 @@ async def parse_and_validate_chat_payload(
             },
         )
 
-    if len(raw_question) > settings.MAX_QUESTION_CHARS:
+    if len(normalized_question) > settings.MAX_QUESTION_CHARS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
@@ -199,7 +187,7 @@ async def parse_and_validate_chat_payload(
             )
         history_turns.append(ChatTurn(user=turn["user"], assistant=turn["assistant"]))
 
-    return raw_question, history_turns
+    return normalized_question, history_turns
 
 
 def check_pipeline_readiness(pipeline: RAGPipeline) -> None:
@@ -207,7 +195,7 @@ def check_pipeline_readiness(pipeline: RAGPipeline) -> None:
     try:
         readiness = pipeline.readiness()
     except Exception as exc:
-        LOGGER.warning("Readiness check error during request: %s", exc)
+        LOGGER.warning("Readiness check error during request (type=%s)", type(exc).__name__)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -229,9 +217,23 @@ def check_pipeline_readiness(pipeline: RAGPipeline) -> None:
         )
 
 
-@router.post("", response_model=ChatResponse)
+@router.post(
+    "",
+    response_model=ChatResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        413: {"model": ErrorResponse, "description": "Request payload too large"},
+        422: {"model": ErrorResponse, "description": "Invalid question or history"},
+        503: {"model": ErrorResponse, "description": "Pipeline not ready or capacity exceeded"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
 async def chat_sync(
     request: Request,
+    body: ChatRequest = Body(
+        ...,
+        description="User question and optional conversational history.",
+    ),
     settings: Settings = Depends(get_settings),
     pipeline: RAGPipeline = Depends(get_pipeline),
     semaphore: asyncio.Semaphore = Depends(get_generation_semaphore),
@@ -300,9 +302,27 @@ async def chat_sync(
     )
 
 
-@router.post("/stream")
+@router.post(
+    "/stream",
+    response_class=StreamingResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "content": {"text/event-stream": {}},
+            "description": "Server-Sent Events stream of PipelineEvents",
+        },
+        413: {"model": ErrorResponse, "description": "Request payload too large"},
+        422: {"model": ErrorResponse, "description": "Invalid question or history"},
+        503: {"model": ErrorResponse, "description": "Pipeline not ready or capacity exceeded"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
 async def chat_stream(
     request: Request,
+    body: ChatRequest = Body(
+        ...,
+        description="User question and optional conversational history.",
+    ),
     settings: Settings = Depends(get_settings),
     pipeline: RAGPipeline = Depends(get_pipeline),
     semaphore: asyncio.Semaphore = Depends(get_generation_semaphore),
@@ -311,7 +331,7 @@ async def chat_stream(
 
     Validates request payload size and conversational bounds, ensures pipeline readiness,
     and executes answer generation within concurrency limits via a background worker thread
-    and asynchronous queue bridge. Handles early client disconnection cleanly.
+    and bounded thread-safe queue bridge. Handles early client disconnection cleanly.
     """
     question, history = await parse_and_validate_chat_payload(request, settings)
     check_pipeline_readiness(pipeline)
@@ -329,10 +349,10 @@ async def chat_stream(
     await semaphore.acquire()
 
     req_id = request.headers.get("x-request-id") or uuid.uuid4().hex
-    queue: asyncio.Queue[PipelineEvent | Exception | object] = asyncio.Queue(maxsize=1000)
+    event_queue: queue.Queue[PipelineEvent | Exception | object] = queue.Queue(maxsize=32)
     stop_event = threading.Event()
-    loop = asyncio.get_running_loop()
     _SENTINEL = object()
+    active_iter: list[Any] = []
 
     def run_worker() -> None:
         try:
@@ -341,30 +361,34 @@ async def chat_stream(
                 history=history,
                 request_id=req_id,
             )
+            active_iter.append(stream_iter)
             for event in stream_iter:
+                while not stop_event.is_set():
+                    try:
+                        event_queue.put(event, timeout=0.05)
+                        break
+                    except queue.Full:
+                        continue
                 if stop_event.is_set():
                     LOGGER.debug("Worker received stop signal, aborting stream (request_id=%s)", req_id)
                     break
-                try:
-                    loop.call_soon_threadsafe(queue.put_nowait, event)
-                except RuntimeError:
-                    break
         except Exception as exc:
             LOGGER.warning(
-                "Unhandled exception in streaming worker thread (request_id=%s, type=%s): %s",
+                "Streaming worker thread failed (request_id=%s, type=%s)",
                 req_id,
                 type(exc).__name__,
-                exc,
             )
             if not stop_event.is_set():
-                try:
-                    loop.call_soon_threadsafe(queue.put_nowait, exc)
-                except RuntimeError:
-                    pass
+                while not stop_event.is_set():
+                    try:
+                        event_queue.put(exc, timeout=0.05)
+                        break
+                    except queue.Full:
+                        continue
         finally:
             try:
-                loop.call_soon_threadsafe(queue.put_nowait, _SENTINEL)
-            except RuntimeError:
+                event_queue.put(_SENTINEL, timeout=0.5)
+            except Exception:
                 pass
 
     worker_thread = threading.Thread(
@@ -386,8 +410,8 @@ async def chat_stream(
                     break
 
                 try:
-                    item = await asyncio.wait_for(queue.get(), timeout=0.25)
-                except asyncio.TimeoutError:
+                    item = await run_in_threadpool(event_queue.get, timeout=0.25)
+                except queue.Empty:
                     if await request.is_disconnected():
                         LOGGER.info("Client disconnected during wait timeout (request_id=%s)", req_id)
                         stop_event.set()
@@ -437,7 +461,7 @@ async def chat_stream(
             stop_event.set()
             raise
         except Exception as exc:
-            LOGGER.warning("Unhandled error during stream consumption (request_id=%s): %s", req_id, exc)
+            LOGGER.warning("Unhandled error during stream consumption (request_id=%s, type=%s)", req_id, type(exc).__name__)
             if not terminal_emitted and not stop_event.is_set():
                 error_event = PipelineEvent.create(
                     "error",
@@ -454,11 +478,18 @@ async def chat_stream(
                 yield format_sse_event(error_event)
         finally:
             stop_event.set()
-            while not queue.empty():
+            if active_iter and hasattr(active_iter[0], "close"):
                 try:
-                    queue.get_nowait()
+                    active_iter[0].close()
+                except Exception:
+                    pass
+            while not event_queue.empty():
+                try:
+                    event_queue.get_nowait()
                 except Exception:
                     break
+            # Wait for worker thread termination before capacity release
+            worker_thread.join(timeout=1.0)
             semaphore.release()
 
     return StreamingResponse(
