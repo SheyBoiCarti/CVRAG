@@ -157,16 +157,46 @@ curl -X POST http://localhost:8000/api/v1/chat/stream \
 
 ---
 
+## RAG Evaluation Framework
+
+The repository includes a native evaluation framework (`evaluation/`) for measuring retrieval performance, answer correctness, fact coverage, citation fidelity, and abstention behavior against versioned golden datasets.
+
+### Running Evaluations
+
+```powershell
+# Run evaluation with a specific configuration preset (e.g. dense-baseline, hybrid-no-rerank, hybrid-rerank)
+python -m evaluation.runner --dataset evaluation/datasets/cv_golden.jsonl --config hybrid-no-rerank --output evaluation/baselines/hybrid.json
+
+# Run evaluation with optional NVIDIA LLM-as-a-judge scoring
+python -m evaluation.runner --dataset evaluation/datasets/cv_golden.jsonl --config hybrid-rerank --judge --output evaluation/baselines/rerank_judged.json
+```
+
+### Comparing Baselines
+
+```powershell
+# Compare two evaluation runs and inspect macro deltas, category breakdowns, and regression warnings
+python -m evaluation.compare evaluation/baselines/dense.json evaluation/baselines/hybrid.json
+```
+
+### Metrics Tracked
+
+- **Retrieval**: `Hit@K`, `Recall@K`, `AllEvidence@K` (multi-hop group coverage), and `MRR`. Ground truth is tied to document anchors `(source, page, anchor)` and does not depend on ephemeral chunk IDs.
+- **Answer & Facts**: `required_fact_coverage`, `forbidden_fact_violation`, `exact_match`, and `correct_abstention_rate` (tested with token boundaries and alias matchers).
+- **Citations**: `citation_id_validity`, `claim_citation_coverage`, and `locator_accuracy`.
+- **Calibration**: Stratified 5-fold cross-validation with cost objective ($5 \times \text{false\_answer} + 1 \times \text{false\_abstention}$) and 95% bootstrap confidence intervals.
+
+---
+
 ## Running Offline Tests & Diagnostics
 
 Validate the codebase and run test suites:
 
 ```powershell
 # Verify syntax and compilation across all modules
-python -m compileall -q app.py backend rag tests test_pipeline.py ui
+python -m compileall -q app.py backend evaluation rag tests test_pipeline.py ui
 
 # Run offline pytest suite with isolated temporary directory (zero network calls)
-python -m pytest -q --basetemp=.pytest_tmp
+python -m pytest -q --basetemp=.pytest_tmp_eval
 
 # Validate package dependency consistency
 python -m pip check
