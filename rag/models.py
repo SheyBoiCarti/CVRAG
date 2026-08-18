@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import types
 from typing import Any, Literal, Mapping, Sequence
 
 PipelineDecision = Literal["answered", "abstained", "degraded"]
@@ -14,6 +15,17 @@ EvidenceSupportStatus = Literal["supported", "unsupported", "not_checked"]
 ClaimVerificationStatus = Literal["supported", "unsupported", "uncited", "invalid_citation", "not_checked"]
 ClaimImportance = Literal["core", "optional"]
 ReadinessState = Literal["starting", "ready", "not_ready"]
+
+
+def _serialize_value(val: Any) -> Any:
+    """Recursively serializes domain models, mappings, and sequences for JSON."""
+    if hasattr(val, "to_dict") and callable(val.to_dict):
+        return _serialize_value(val.to_dict())
+    if isinstance(val, Mapping):
+        return {str(k): _serialize_value(v) for k, v in val.items()}
+    if isinstance(val, (list, tuple, set)):
+        return [_serialize_value(v) for v in val]
+    return val
 
 
 @dataclass(frozen=True)
@@ -43,9 +55,9 @@ class Evidence:
 
     def __post_init__(self) -> None:
         if self.metadata is None:
-            object.__setattr__(self, "metadata", {})
-        elif isinstance(self.metadata, dict):
-            object.__setattr__(self, "metadata", dict(self.metadata))
+            object.__setattr__(self, "metadata", types.MappingProxyType({}))
+        elif not isinstance(self.metadata, types.MappingProxyType):
+            object.__setattr__(self, "metadata", types.MappingProxyType(dict(self.metadata)))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -180,9 +192,9 @@ class PipelineEvent:
 
     def __post_init__(self) -> None:
         if self.data is None:
-            object.__setattr__(self, "data", {})
-        elif isinstance(self.data, dict):
-            object.__setattr__(self, "data", dict(self.data))
+            object.__setattr__(self, "data", types.MappingProxyType({}))
+        elif not isinstance(self.data, types.MappingProxyType):
+            object.__setattr__(self, "data", types.MappingProxyType(dict(self.data)))
 
     @classmethod
     def create(
@@ -209,14 +221,14 @@ class PipelineEvent:
             "request_id": self.request_id,
             "sequence": self.sequence,
             "event": self.event,
-            "data": dict(self.data),
+            "data": _serialize_value(self.data),
         }
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False)
 
     def to_sse(self) -> str:
-        return f"event: {self.event}\ndata: {self.to_json()}\n\n"
+        return f"data: {self.to_json()}\n\n"
 
 
 __all__ = [

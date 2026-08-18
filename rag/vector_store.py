@@ -166,21 +166,41 @@ class VectorStoreManager:
         self,
         persist_dir: Path | None = None,
         embeddings: Embeddings | None = None,
+        collection_name: str | None = None,
+        settings: Any | None = None,
     ):
-        if embeddings is None:
-            Config.validate()
-        self.persist_dir = str(persist_dir or Config.VECTOR_DB_DIR)
-        self.embeddings = embeddings or RobustNVIDIAEmbeddings(
-            model=Config.EMBEDDING_MODEL,
-            api_key=Config.NVIDIA_API_KEY or "",
-            batch_size=Config.EMBEDDING_BATCH_SIZE,
-            max_retries=Config.MAX_RETRIES,
-            timeout=Config.REQUEST_TIMEOUT,
-        )
+        self.settings = settings
+        if self.settings is not None:
+            if embeddings is None:
+                self.settings.validate_runtime()
+            self.persist_dir = str(persist_dir or self.settings.VECTOR_DB_DIR)
+            self.embeddings = embeddings or RobustNVIDIAEmbeddings(
+                model=self.settings.EMBEDDING_MODEL,
+                api_key=self.settings.NVIDIA_API_KEY or "",
+                batch_size=self.settings.EMBEDDING_BATCH_SIZE,
+                max_retries=self.settings.MAX_RETRIES,
+                timeout=self.settings.REQUEST_TIMEOUT,
+            )
+            self.collection_name = collection_name or self.settings.COLLECTION_NAME
+            self.retrieval_k = self.settings.RETRIEVAL_K
+        else:
+            if embeddings is None:
+                Config.validate()
+            self.persist_dir = str(persist_dir or Config.VECTOR_DB_DIR)
+            self.embeddings = embeddings or RobustNVIDIAEmbeddings(
+                model=Config.EMBEDDING_MODEL,
+                api_key=Config.NVIDIA_API_KEY or "",
+                batch_size=Config.EMBEDDING_BATCH_SIZE,
+                max_retries=Config.MAX_RETRIES,
+                timeout=Config.REQUEST_TIMEOUT,
+            )
+            self.collection_name = collection_name or Config.COLLECTION_NAME
+            self.retrieval_k = Config.RETRIEVAL_K
+
         self.vector_store = Chroma(
             persist_directory=self.persist_dir,
             embedding_function=self.embeddings,
-            collection_name=Config.COLLECTION_NAME,
+            collection_name=self.collection_name,
         )
 
     def ensure_documents(self, chunks: list[Document]) -> int:
@@ -193,13 +213,13 @@ class VectorStoreManager:
 
     def get_retriever(self, search_kwargs: dict | None = None):
         """Returns a LangChain retriever interface for vector similarity search."""
-        kwargs = search_kwargs or {"k": Config.RETRIEVAL_K}
+        kwargs = search_kwargs or {"k": self.retrieval_k}
         return self.vector_store.as_retriever(search_kwargs=kwargs)
 
     def similarity_search(self, query: str, k: int | None = None) -> list[Document]:
         """Performs vector similarity search returning top-k Document chunks."""
         return self.vector_store.similarity_search(
-            query=query, k=k or Config.RETRIEVAL_K
+            query=query, k=k or self.retrieval_k
         )
 
     def similarity_search_with_scores(
@@ -207,7 +227,7 @@ class VectorStoreManager:
     ) -> list[tuple[Document, float]]:
         """Performs vector similarity search returning Document chunks and relevance scores."""
         return self.vector_store.similarity_search_with_relevance_scores(
-            query=query, k=k or Config.RETRIEVAL_K
+            query=query, k=k or self.retrieval_k
         )
 
     def get_document_count(self) -> int:

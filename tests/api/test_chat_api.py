@@ -973,3 +973,114 @@ def test_chat_stream_end_to_end_with_fake_providers(tmp_path: Path) -> None:
             assert "Alice Smith" in events[-1]["data"]["result"]["answer"]
             assert events[-1]["data"]["result"]["citations"][0]["source"] == "sample_cv.txt"
 
+
+def test_chat_sync_chunked_body_exceeding_limit_returns_413(tmp_path: Path) -> None:
+    """Streaming chunked request exceeding API_MAX_BODY_BYTES aborts with 413."""
+    settings = Settings(
+        NVIDIA_API_KEY="mock-key",
+        DOCUMENTS_DIR=tmp_path / "docs",
+        VECTOR_DB_DIR=tmp_path / "vector_db",
+        API_MAX_BODY_BYTES=100,
+    )
+    mock_pipeline = MagicMock(spec=RAGPipeline)
+    mock_pipeline.readiness.return_value = ReadinessResult(state="ready")
+    app = create_app(settings=settings, pipeline=mock_pipeline)
+
+    def oversized_chunks():
+        for _ in range(5):
+            yield b"x" * 30
+
+    with TestClient(app) as client:
+        res = client.post(
+            "/api/v1/chat",
+            content=oversized_chunks(),
+            headers={"Content-Type": "application/json"},
+        )
+        assert res.status_code == 413
+        assert res.json()["error"]["code"] == "request_too_large"
+
+
+def test_chat_question_whitespace_normalization_allows_valid_1000_char_core(tmp_path: Path) -> None:
+    """A question with leading/trailing whitespace whose trimmed length is exactly MAX_QUESTION_CHARS is accepted."""
+    settings = Settings(
+        NVIDIA_API_KEY="mock-key",
+        DOCUMENTS_DIR=tmp_path / "docs",
+        VECTOR_DB_DIR=tmp_path / "vector_db",
+        MAX_QUESTION_CHARS=1000,
+    )
+    mock_pipeline = MagicMock(spec=RAGPipeline)
+    mock_pipeline.readiness.return_value = ReadinessResult(state="ready")
+    mock_pipeline.answer.return_value = AnswerResult(answer="Answered", decision="answered")
+    app = create_app(settings=settings, pipeline=mock_pipeline)
+
+    padded_question = "   " + ("q" * 1000) + "   "
+    with TestClient(app) as client:
+        res = client.post(
+            "/api/v1/chat",
+            json={"question": padded_question},
+        )
+        assert res.status_code == 200
+        assert res.json()["answer"] == "Answered"
+
+
+def test_multiple_chat_requests_reuse_single_pipeline_instance(tmp_path: Path) -> None:
+    """Sequential chat requests reuse the existing pipeline instance without re-instantiation."""
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    (docs_dir / "cv.txt").write_text("Experienced Software Engineer.", encoding="utf-8")
+    settings = Settings(
+        NVIDIA_API_KEY="mock-key",
+        DOCUMENTS_DIR=docs_dir,
+        VECTOR_DB_DIR=tmp_path / "vdb",
+    )
+    factories = FakeProviderFactories(default_response="Engineered response.")
+    pipeline = RAGPipeline(settings=settings, provider_factories=factories)
+    app = create_app(settings=settings, pipeline=pipeline)
+
+    with TestClient(app) as client:
+        res1 = client.post("/api/v1/chat", json={"question": "Question 1?"})
+        assert res1.status_code == 200
+
+        res2 = client.post("/api/v1/chat", json={"question": "Question 2?"})
+        assert res2.status_code == 200
+
+        assert app.state.pipeline is pipeline
+
+
+def test_chat_stream_client_disconnect_stops_producer(tmp_path: Path) -> None:
+    """Disconnecting from SSE stream terminates the producer loop and releases concurrency capacity."""
+    settings = Settings(
+        NVIDIA_API_KEY="mock-key",
+        DOCUMENTS_DIR=tmp_path / "docs",
+        VECTOR_DB_DIR=tmp_path / "vector_db",
+        API_MAX_CONCURRENT_GENERATIONS=1,
+    )
+    mock_pipeline = MagicMock(spec=RAGPipeline)
+    mock_pipeline.readiness.return_value = ReadinessResult(state="ready")
+
+    producer_closed = threading.Event()
+
+    class CancellableGenerator:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            time.sleep(0.05)
+            return PipelineEvent.create("answer_delta", {"delta": "token "}, request_id="req-d", sequence=1)
+
+        def close(self):
+            producer_closed.set()
+
+    mock_pipeline.stream.return_value = CancellableGenerator()
+    app = create_app(settings=settings, pipeline=mock_pipeline)
+
+    with TestClient(app) as client:
+        with client.stream("POST", "/api/v1/chat/stream", json={"question": "Test disconnect"}) as res:
+            assert res.status_code == 200
+            for line in res.iter_lines():
+                if line.startswith("data:"):
+                    break
+
+        assert producer_closed.wait(timeout=2.0)
+        assert not app.state.generation_semaphore.locked()
+

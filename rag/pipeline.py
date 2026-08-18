@@ -10,6 +10,12 @@ import uuid
 from langchain_core.output_parsers import StrOutputParser
 
 from rag.document_loader import CVDocumentLoader
+from rag.ingestion.indexer import IndexSynchronizer
+from rag.persistence.chroma_store import ChromaStoreAdapter
+from rag.retrieval.bm25 import BM25Retriever
+from rag.retrieval.dense import DenseRetriever
+from rag.retrieval.reranker import NvidiaReranker, NoOpReranker
+from rag.retrieval.service import RetrievalService
 from rag.engine import CVChatEngine, NO_RESULTS_ANSWER
 from rag.errors import ProviderUnavailableError
 from rag.models import AnswerResult, ChatTurn, Citation, PipelineEvent, ReadinessResult
@@ -38,9 +44,8 @@ class RAGPipeline:
                 self._engine = self._build_engine()
             except Exception as exc:
                 LOGGER.debug(
-                    "Deferred engine construction during pipeline initialization (type=%s, msg=%s)",
+                    "Deferred engine construction during pipeline initialization (type=%s)",
                     type(exc).__name__,
-                    exc,
                 )
                 self._engine = None
 
@@ -49,19 +54,38 @@ class RAGPipeline:
         factories = self.provider_factories or LiveProviderFactories()
         embeddings = factories.create_embeddings(self.settings)
         llm = factories.create_chat_model(self.settings)
+        active_index = IndexSynchronizer(settings=self.settings, embeddings=embeddings).ensure_active_index()
         vector_manager = VectorStoreManager(
             persist_dir=self.settings.VECTOR_DB_DIR,
             embeddings=embeddings,
+            collection_name=active_index.collection_name,
+            settings=self.settings,
+        )
+        reranker = NoOpReranker()
+        if self.settings.RERANK_ENABLED:
+            reranker = NvidiaReranker(factories.create_reranker(self.settings))
+        retrieval_service = RetrievalService(
+            settings=self.settings,
+            dense_retriever=DenseRetriever(ChromaStoreAdapter(
+                persist_dir=self.settings.VECTOR_DB_DIR, collection_name=active_index.collection_name, embeddings=embeddings,
+            )),
+            sparse_retriever=BM25Retriever(active_index.chunks),
+            reranker=reranker,
+            index_fingerprint=active_index.index_fingerprint,
         )
         loader = CVDocumentLoader(
             documents_dir=self.settings.DOCUMENTS_DIR,
+            chunk_size=self.settings.CHUNK_SIZE,
+            chunk_overlap=self.settings.CHUNK_OVERLAP,
+            settings=self.settings,
         )
         return CVChatEngine(
-            auto_index=True,
+            auto_index=False,
             vector_manager=vector_manager,
             loader=loader,
             llm=llm,
             settings=self.settings,
+            retrieval_service=retrieval_service,
         )
 
     def _get_engine(self) -> CVChatEngine:
@@ -160,11 +184,17 @@ class RAGPipeline:
         sanitized_question = self.settings.validate_question(question)
         bounded_history = self._normalize_history(history)
         engine = self._get_engine()
-        prepared = engine.prepare_query(
-            sanitized_question,
-            bounded_history,
-            k=self.settings.RETRIEVAL_K,
-        )
+        try:
+            prepared = engine.prepare_query(
+                sanitized_question,
+                bounded_history,
+                k=self.settings.RETRIEVAL_K,
+            )
+        except Exception as exc:
+            LOGGER.warning("Retrieval preparation failed (type=%s)", type(exc).__name__)
+            if is_transient_error(exc):
+                raise ProviderUnavailableError() from exc
+            raise
 
         if not prepared.documents:
             return AnswerResult(
@@ -256,9 +286,9 @@ class RAGPipeline:
             yield PipelineEvent.create(
                 "error",
                 {
-                    "code": "stream_interrupted",
-                    "message": "The stream was interrupted.",
-                    "retryable": False,
+                    "code": "retrieval_unavailable" if is_transient_error(exc) else "stream_interrupted",
+                    "message": "Evidence retrieval failed." if is_transient_error(exc) else "The stream was interrupted.",
+                    "retryable": is_transient_error(exc),
                     "partial_answer": None,
                 },
                 request_id=request_id,
@@ -361,7 +391,7 @@ class RAGPipeline:
                     state="ready",
                     reason_codes=(),
                     pipeline_version=self.settings.PIPELINE_VERSION,
-                    index_fingerprint=None,
+                    index_fingerprint=(engine.retrieval_service.index_fingerprint if engine.retrieval_service is not None else None),
                 )
             return ReadinessResult(
                 state="not_ready",
@@ -371,9 +401,8 @@ class RAGPipeline:
             )
         except Exception as exc:
             LOGGER.warning(
-                "Readiness check failed (type=%s, detail=%s)",
+                "Readiness check failed (type=%s)",
                 type(exc).__name__,
-                exc,
             )
             return ReadinessResult(
                 state="not_ready",

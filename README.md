@@ -112,28 +112,37 @@ You can run both the FastAPI backend and Streamlit UI concurrently in separate t
 
 ## API Endpoints
 
-The FastAPI backend exposes the following REST and streaming endpoints:
+The FastAPI backend exposes the following REST and streaming endpoints under `/api/v1`:
 
 ### Health Probes
 
-- **`GET /health/live`**: Liveness probe returning status `200 OK` with `{"status": "alive"}`.
-- **`GET /health/ready`**: Readiness probe returning status `200 OK` when the vector database and pipeline are fully initialized (`{"status": "ready", "pipeline_version": "dense-v1", "index_fingerprint": "..."}`), or `503 Service Unavailable` with detailed reason codes when initializing or degraded.
+- **`GET /api/v1/health/live`**: Liveness probe returning status `200 OK` with `{"status": "live"}`.
+- **`GET /api/v1/health/ready`**: Readiness probe returning status `200 OK` with `ReadinessResponse` when the vector database and pipeline are fully initialized (`{"state": "ready", "reason_codes": [], "pipeline_version": "dense-v1", "index_fingerprint": null}`), or `503 Service Unavailable` with detailed reason codes when initializing or degraded.
 
-### Chat Completions
+### Synchronous Chat
 
-- **`POST /v1/chat/completions`**: OpenAI-compatible endpoint supporting both standard JSON responses and Server-Sent Events (SSE) streaming (`stream: true`).
-  
-#### Request Example (Streaming):
+- **`POST /api/v1/chat`**: Synchronous question answering endpoint returning structured JSON with factual citations and decisions.
 
 ```bash
-curl -X POST http://localhost:8000/v1/chat/completions \
+curl -X POST http://localhost:8000/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "meta/llama-3.3-70b-instruct",
-    "messages": [
-      {"role": "user", "content": "What is the candidate experience with Kubernetes and distributed systems?"}
-    ],
-    "stream": true
+    "question": "What is the candidate experience with Python?",
+    "history": [
+      {"user": "Hello", "assistant": "Hi! How can I help you today?"}
+    ]
+  }'
+```
+
+### Streaming Chat (SSE)
+
+- **`POST /api/v1/chat/stream`**: Server-Sent Events (SSE) streaming endpoint emitting monotonic Schema Version 1 events (`retrieval_started`, `retrieval_completed`, `generation_started`, `answer_delta`, `answer_completed`).
+
+```bash
+curl -X POST http://localhost:8000/api/v1/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "What is the candidate experience with Python?"
   }'
 ```
 

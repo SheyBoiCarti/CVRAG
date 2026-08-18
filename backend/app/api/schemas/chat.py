@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Literal
 from pydantic import BaseModel, Field
+
+PipelineDecision = Literal["answered", "abstained", "degraded"]
+EvidenceSupportStatus = Literal["supported", "unsupported", "not_checked"]
+ClaimVerificationStatus = Literal[
+    "supported", "unsupported", "uncited", "invalid_citation", "not_checked"
+]
+ClaimImportance = Literal["core", "optional"]
 
 
 class ChatTurnSchema(BaseModel):
@@ -27,7 +35,7 @@ class CitationSchema(BaseModel):
     source: str
     page: int
     excerpt: str
-    support_status: str = "not_checked"
+    support_status: EvidenceSupportStatus = "not_checked"
 
 
 class ClaimVerificationSchema(BaseModel):
@@ -36,9 +44,9 @@ class ClaimVerificationSchema(BaseModel):
     claim_id: str
     text: str
     factual: bool = True
-    importance: str = "core"
+    importance: ClaimImportance = "core"
     citation_ids: list[str] = Field(default_factory=list)
-    status: str = "not_checked"
+    status: ClaimVerificationStatus = "not_checked"
     reason_code: str = ""
 
 
@@ -48,7 +56,7 @@ class ChatResponse(BaseModel):
     answer: str
     citations: list[CitationSchema] = Field(default_factory=list)
     claim_verifications: list[ClaimVerificationSchema] = Field(default_factory=list)
-    decision: str = "answered"
+    decision: PipelineDecision = "answered"
     reason_codes: list[str] = Field(default_factory=list)
     retrieval_query: str = ""
     pipeline_version: str = ""
@@ -60,4 +68,8 @@ __all__ = [
     "ChatTurnSchema",
     "CitationSchema",
     "ClaimVerificationSchema",
+    "PipelineDecision",
+    "EvidenceSupportStatus",
+    "ClaimVerificationStatus",
+    "ClaimImportance",
 ]
