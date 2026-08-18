@@ -51,6 +51,16 @@ class RankedChunk:
         object.__setattr__(self, "methods", tuple(self.methods))
         object.__setattr__(self, "stage_scores", _immutable_mapping(self.stage_scores))
 
+    def to_dict(self) -> dict[str, Any]:
+        """Returns canonical JSON-serializable ranked chunk representation."""
+        return {
+            "chunk": self.chunk.to_dict(),
+            "rank": self.rank,
+            "score": self.score,
+            "methods": list(self.methods),
+            "stage_scores": dict(self.stage_scores),
+        }
+
 
 class Retriever(Protocol):
     """Searches a corpus and returns stage-ranked canonical chunks."""
