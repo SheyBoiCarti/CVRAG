@@ -6,9 +6,12 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Sequence
+import threading
+from typing import Any, Sequence
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api.schemas.chat import (
@@ -22,13 +25,39 @@ from backend.app.dependencies import (
     get_pipeline,
     get_settings,
 )
-from rag.models import ChatTurn
+from rag.models import ChatTurn, PipelineEvent
 from rag.pipeline import RAGPipeline
 from rag.settings import Settings
 
 LOGGER = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _serialize_for_json(obj: Any) -> Any:
+    """Recursively serializes domain models, dataclasses, dicts, and sequences for SSE JSON payload."""
+    if hasattr(obj, "to_dict") and callable(obj.to_dict):
+        return _serialize_for_json(obj.to_dict())
+    if isinstance(obj, dict):
+        d = {k: _serialize_for_json(v) for k, v in obj.items()}
+        if "source" in d and isinstance(d["source"], str) and "evidence_id" in d:
+            d["source"] = Path(d["source"]).name
+        return d
+    if isinstance(obj, (list, tuple)):
+        return [_serialize_for_json(item) for item in obj]
+    return obj
+
+
+def format_sse_event(event: PipelineEvent) -> str:
+    """Formats a PipelineEvent envelope into standard SSE wire format: `data: {...}\\n\\n`."""
+    payload = {
+        "schema_version": event.schema_version,
+        "request_id": event.request_id,
+        "sequence": event.sequence,
+        "event": event.event,
+        "data": _serialize_for_json(event.data),
+    }
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 async def parse_and_validate_chat_payload(
@@ -271,9 +300,174 @@ async def chat_sync(
     )
 
 
+@router.post("/stream")
+async def chat_stream(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    pipeline: RAGPipeline = Depends(get_pipeline),
+    semaphore: asyncio.Semaphore = Depends(get_generation_semaphore),
+) -> StreamingResponse:
+    """Server-Sent Events (SSE) streaming chat endpoint.
+
+    Validates request payload size and conversational bounds, ensures pipeline readiness,
+    and executes answer generation within concurrency limits via a background worker thread
+    and asynchronous queue bridge. Handles early client disconnection cleanly.
+    """
+    question, history = await parse_and_validate_chat_payload(request, settings)
+    check_pipeline_readiness(pipeline)
+
+    if semaphore.locked():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "capacity_exceeded",
+                "message": "Maximum concurrent generation limit reached. Please retry shortly.",
+                "retryable": True,
+            },
+        )
+
+    await semaphore.acquire()
+
+    req_id = request.headers.get("x-request-id") or uuid.uuid4().hex
+    queue: asyncio.Queue[PipelineEvent | Exception | object] = asyncio.Queue(maxsize=1000)
+    stop_event = threading.Event()
+    loop = asyncio.get_running_loop()
+    _SENTINEL = object()
+
+    def run_worker() -> None:
+        try:
+            stream_iter = pipeline.stream(
+                question=question,
+                history=history,
+                request_id=req_id,
+            )
+            for event in stream_iter:
+                if stop_event.is_set():
+                    LOGGER.debug("Worker received stop signal, aborting stream (request_id=%s)", req_id)
+                    break
+                loop.call_soon_threadsafe(queue.put_nowait, event)
+        except Exception as exc:
+            LOGGER.warning(
+                "Unhandled exception in streaming worker thread (request_id=%s, type=%s): %s",
+                req_id,
+                type(exc).__name__,
+                exc,
+            )
+            if not stop_event.is_set():
+                loop.call_soon_threadsafe(queue.put_nowait, exc)
+        finally:
+            loop.call_soon_threadsafe(queue.put_nowait, _SENTINEL)
+
+    worker_thread = threading.Thread(
+        target=run_worker,
+        name=f"rag-stream-worker-{req_id}",
+        daemon=True,
+    )
+    worker_thread.start()
+
+    async def stream_generator():
+        seq = 1
+        accumulated_answer = ""
+        terminal_emitted = False
+        try:
+            while True:
+                if await request.is_disconnected():
+                    LOGGER.info("Client disconnected during stream (request_id=%s)", req_id)
+                    stop_event.set()
+                    break
+
+                try:
+                    item = await asyncio.wait_for(queue.get(), timeout=0.25)
+                except asyncio.TimeoutError:
+                    if await request.is_disconnected():
+                        LOGGER.info("Client disconnected during wait timeout (request_id=%s)", req_id)
+                        stop_event.set()
+                        break
+                    continue
+
+                if item is _SENTINEL:
+                    break
+
+                if isinstance(item, Exception):
+                    if not terminal_emitted and not stop_event.is_set():
+                        error_event = PipelineEvent.create(
+                            "error",
+                            {
+                                "code": "stream_interrupted",
+                                "message": "The stream was interrupted.",
+                                "retryable": False,
+                                "partial_answer": accumulated_answer or None,
+                            },
+                            request_id=req_id,
+                            sequence=seq,
+                        )
+                        seq += 1
+                        terminal_emitted = True
+                        yield format_sse_event(error_event)
+                    break
+
+                if isinstance(item, PipelineEvent):
+                    if stop_event.is_set():
+                        break
+
+                    if item.event == "answer_delta":
+                        delta = item.data.get("delta", "")
+                        if delta:
+                            accumulated_answer += delta
+                    elif item.event in ("answer_completed", "error"):
+                        terminal_emitted = True
+
+                    yield format_sse_event(item)
+                    seq = max(seq, item.sequence + 1)
+
+                    if item.event in ("answer_completed", "error"):
+                        break
+
+        except asyncio.CancelledError:
+            LOGGER.info("Streaming response task cancelled (request_id=%s)", req_id)
+            stop_event.set()
+            raise
+        except Exception as exc:
+            LOGGER.warning("Unhandled error during stream consumption (request_id=%s): %s", req_id, exc)
+            if not terminal_emitted and not stop_event.is_set():
+                error_event = PipelineEvent.create(
+                    "error",
+                    {
+                        "code": "stream_interrupted",
+                        "message": "The stream was interrupted.",
+                        "retryable": False,
+                        "partial_answer": accumulated_answer or None,
+                    },
+                    request_id=req_id,
+                    sequence=seq,
+                )
+                terminal_emitted = True
+                yield format_sse_event(error_event)
+        finally:
+            stop_event.set()
+            while not queue.empty():
+                try:
+                    queue.get_nowait()
+                except Exception:
+                    break
+            semaphore.release()
+
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Content-Type": "text/event-stream",
+        },
+    )
+
+
 __all__ = [
+    "chat_stream",
     "chat_sync",
     "check_pipeline_readiness",
+    "format_sse_event",
     "parse_and_validate_chat_payload",
     "router",
 ]
