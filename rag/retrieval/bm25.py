@@ -25,12 +25,15 @@ class BM25Retriever:
 
     def __init__(self, chunks: Sequence[ChunkRecord], *, k1: float = 1.5, b: float = 0.75, epsilon: float = 0.25) -> None:
         self.chunks = tuple(chunks)
-        self._index = BM25Okapi([tokenize_technical_text(chunk.content) for chunk in self.chunks], k1=k1, b=b, epsilon=epsilon)
+        self._index = (
+            BM25Okapi([tokenize_technical_text(chunk.content) for chunk in self.chunks], k1=k1, b=b, epsilon=epsilon)
+            if self.chunks else None
+        )
 
     def search(self, query: str, k: int) -> list[RankedChunk]:
         """Ranks positive BM25 matches with chunk-ID deterministic ties."""
         tokens = tokenize_technical_text(query)
-        if not tokens or k <= 0 or not self.chunks:
+        if not tokens or k <= 0 or self._index is None:
             return []
         scored = [
             (self.chunks[index], float(score))

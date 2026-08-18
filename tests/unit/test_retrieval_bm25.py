@@ -20,3 +20,8 @@ def test_bm25_preserves_technical_tokens_and_ranks_exact_match() -> None:
     assert results[0].methods == ("sparse",)
     assert results[0].stage_scores["sparse"] > 0
     assert retriever.search("   ", k=3) == []
+
+
+def test_bm25_empty_corpus_is_searchable_without_provider_initialization() -> None:
+    """An empty CV corpus is a valid not-ready state, not a construction failure."""
+    assert BM25Retriever([]).search("python", k=3) == []
