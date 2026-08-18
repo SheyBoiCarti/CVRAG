@@ -12,7 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from backend.app.api.routes import health
+from backend.app.api.routes import chat, health
 from backend.app.api.schemas.common import ErrorDetail, ErrorResponse
 from rag.errors import ProviderUnavailableError, RAGError
 from rag.pipeline import RAGPipeline
@@ -213,6 +213,7 @@ def create_app(
 
     # Route registration
     app.include_router(health.router, prefix="/api/v1/health", tags=["health"])
+    app.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
 
     return app
 
