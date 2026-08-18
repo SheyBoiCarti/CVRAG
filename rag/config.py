@@ -5,26 +5,29 @@ from rag.settings import BASE_DIR, Settings, get_settings, make_collection_name
 
 
 class Config:
-    """Backward-compatible configuration bridge delegating to Settings."""
+    """Centralized configuration and runtime validation for the CV RAG assistant."""
 
-    BASE_DIR: Path = BASE_DIR
-    _settings: ClassVar[Settings] = get_settings()
+    BASE_DIR = BASE_DIR
+    NVIDIA_API_KEY = _get_setting("NVIDIA_API_KEY")
+    LLM_MODEL = _get_setting("LLM_MODEL", "meta/llama-3.3-70b-instruct")
+    EMBEDDING_MODEL = _get_setting("EMBEDDING_MODEL", "nvidia/nv-embedqa-e5-v5")
+    DOCUMENTS_DIR = _configured_path("DOCUMENTS_DIR", BASE_DIR / "documents")
+    VECTOR_DB_DIR = _configured_path("VECTOR_DB_DIR", BASE_DIR / "vector_db")
 
-    NVIDIA_API_KEY: str | None = _settings.NVIDIA_API_KEY
-    LLM_MODEL: str = _settings.LLM_MODEL
-    EMBEDDING_MODEL: str = _settings.EMBEDDING_MODEL
-    DOCUMENTS_DIR: Path = _settings.DOCUMENTS_DIR
-    VECTOR_DB_DIR: Path = _settings.VECTOR_DB_DIR
-    CHUNK_SIZE: int = _settings.CHUNK_SIZE
-    CHUNK_OVERLAP: int = _settings.CHUNK_OVERLAP
-    RETRIEVAL_K: int = _settings.RETRIEVAL_K
-    MAX_QUESTION_CHARS: int = _settings.MAX_QUESTION_CHARS
-    MAX_HISTORY_TURNS: int = _settings.MAX_HISTORY_TURNS
-    REQUEST_TIMEOUT: float = _settings.REQUEST_TIMEOUT
-    MAX_RETRIES: int = _settings.MAX_RETRIES
-    EMBEDDING_BATCH_SIZE: int = _settings.EMBEDDING_BATCH_SIZE
-    INDEX_SCHEMA_VERSION: str = _settings.INDEX_SCHEMA_VERSION
-    COLLECTION_NAME: str = ""
+    # Document chunking parameters tuned for resume section continuity
+    CHUNK_SIZE = int(_get_setting("CHUNK_SIZE", "700"))
+    CHUNK_OVERLAP = int(_get_setting("CHUNK_OVERLAP", "140"))
+    RETRIEVAL_K = int(_get_setting("RETRIEVAL_K", "6"))
+    MAX_QUESTION_CHARS = int(_get_setting("MAX_QUESTION_CHARS", "1000"))
+    MAX_HISTORY_TURNS = int(_get_setting("MAX_HISTORY_TURNS", "4"))
+
+    # Upstream provider resilience settings
+    REQUEST_TIMEOUT = float(_get_setting("REQUEST_TIMEOUT", "45"))
+    MAX_RETRIES = int(_get_setting("MAX_RETRIES", "3"))
+    EMBEDDING_BATCH_SIZE = int(_get_setting("EMBEDDING_BATCH_SIZE", "15"))
+
+    # Schema version tag: bump this to automatically invalidate and recreate vector collections
+    INDEX_SCHEMA_VERSION = "v4"
 
     @classmethod
     def make_collection_name(cls) -> str:
