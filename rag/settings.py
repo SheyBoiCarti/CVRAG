@@ -31,6 +31,17 @@ class Settings:
     CHUNK_SIZE: int = 700
     CHUNK_OVERLAP: int = 140
     RETRIEVAL_K: int = 6
+    RETRIEVAL_MODE: str = "dense"
+    DENSE_CANDIDATE_K: int = 20
+    SPARSE_CANDIDATE_K: int = 20
+    FUSION_CANDIDATE_K: int = 20
+    CONTEXT_K: int | None = None
+    RRF_CONSTANT: int = 60
+    DENSE_RRF_WEIGHT: float = 1.0
+    SPARSE_RRF_WEIGHT: float = 1.0
+    RERANK_ENABLED: bool = False
+    RERANK_MODEL: str = "nvidia/llama-nemotron-rerank-1b-v2"
+    RERANK_CANDIDATE_K: int = 20
     MAX_QUESTION_CHARS: int = 1000
     MAX_HISTORY_TURNS: int = 4
     REQUEST_TIMEOUT: float = 45.0
@@ -58,6 +69,8 @@ class Settings:
         else:
             vec_dir = vec_dir.resolve()
         object.__setattr__(self, "VECTOR_DB_DIR", vec_dir)
+        if self.CONTEXT_K is None:
+            object.__setattr__(self, "CONTEXT_K", self.RETRIEVAL_K)
 
         # Normalize and validate CORS origins
         if isinstance(self.API_CORS_ORIGINS, str):
@@ -78,6 +91,21 @@ class Settings:
             raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_SIZE.")
         if not (1 <= self.RETRIEVAL_K <= 12):
             raise ValueError("RETRIEVAL_K must be between 1 and 12.")
+        if self.RETRIEVAL_MODE not in {"dense", "hybrid"}:
+            raise ValueError("RETRIEVAL_MODE must be 'dense' or 'hybrid'.")
+        if any(value <= 0 for value in (self.DENSE_CANDIDATE_K, self.SPARSE_CANDIDATE_K, self.FUSION_CANDIDATE_K, self.CONTEXT_K, self.RRF_CONSTANT, self.RERANK_CANDIDATE_K)):
+            raise ValueError("Retrieval candidate limits and RRF_CONSTANT must be positive.")
+        if self.DENSE_RRF_WEIGHT < 0 or self.SPARSE_RRF_WEIGHT < 0:
+            raise ValueError("RRF weights must be nonnegative.")
+        if self.RETRIEVAL_MODE == "dense" and self.CONTEXT_K > self.DENSE_CANDIDATE_K:
+            raise ValueError("CONTEXT_K cannot exceed DENSE_CANDIDATE_K in dense mode.")
+        if self.RETRIEVAL_MODE == "hybrid":
+            if self.FUSION_CANDIDATE_K > self.DENSE_CANDIDATE_K + self.SPARSE_CANDIDATE_K:
+                raise ValueError("FUSION_CANDIDATE_K cannot exceed combined candidate counts.")
+            if self.RERANK_ENABLED and not (self.CONTEXT_K <= self.RERANK_CANDIDATE_K <= self.FUSION_CANDIDATE_K):
+                raise ValueError("Hybrid reranking requires CONTEXT_K <= RERANK_CANDIDATE_K <= FUSION_CANDIDATE_K.")
+        if self.RERANK_ENABLED and not self.RERANK_MODEL.strip():
+            raise ValueError("RERANK_MODEL is required when reranking is enabled.")
         if self.MAX_QUESTION_CHARS <= 0:
             raise ValueError("MAX_QUESTION_CHARS must be positive.")
         if not (1 <= self.MAX_HISTORY_TURNS <= 20):
@@ -160,6 +188,17 @@ def get_settings(environ: Mapping[str, str] | None = None) -> Settings:
         kwargs["CHUNK_OVERLAP"] = int(env["CHUNK_OVERLAP"])
     if "RETRIEVAL_K" in env:
         kwargs["RETRIEVAL_K"] = int(env["RETRIEVAL_K"])
+    for key in ("RETRIEVAL_MODE", "RERANK_MODEL"):
+        if key in env:
+            kwargs[key] = env[key]
+    for key in ("DENSE_CANDIDATE_K", "SPARSE_CANDIDATE_K", "FUSION_CANDIDATE_K", "CONTEXT_K", "RRF_CONSTANT", "RERANK_CANDIDATE_K"):
+        if key in env:
+            kwargs[key] = int(env[key])
+    for key in ("DENSE_RRF_WEIGHT", "SPARSE_RRF_WEIGHT"):
+        if key in env:
+            kwargs[key] = float(env[key])
+    if "RERANK_ENABLED" in env:
+        kwargs["RERANK_ENABLED"] = _get_bool("RERANK_ENABLED")
     if "MAX_QUESTION_CHARS" in env:
         kwargs["MAX_QUESTION_CHARS"] = int(env["MAX_QUESTION_CHARS"])
     if "MAX_HISTORY_TURNS" in env:
