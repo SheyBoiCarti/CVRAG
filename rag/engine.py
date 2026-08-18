@@ -1,8 +1,7 @@
 import logging
+from pathlib import Path
 import re
 import threading
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Iterator
 
 from langchain_core.documents import Document
@@ -13,23 +12,30 @@ from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from rag.config import Config
 from rag.document_loader import CVDocumentLoader
 from rag.errors import ProviderUnavailableError
+from rag.settings import Settings, get_settings
 from rag.vector_store import VectorStoreManager, is_transient_error, retry_transient
-
 
 LOGGER = logging.getLogger(__name__)
 _INDEX_LOCK = threading.Lock()
 NO_RESULTS_ANSWER = "I couldn't find that information in the CV."
 
 
-@dataclass(frozen=True)
 class PreparedQuery:
     """Encapsulates sanitized inputs and retrieved evidence for prompt synthesis."""
 
-    question: str
-    retrieval_query: str
-    history_messages: list[tuple[str, str]]
-    documents: list[Document]
-    context: str
+    def __init__(
+        self,
+        question: str,
+        retrieval_query: str,
+        history_messages: list[tuple[str, str]],
+        documents: list[Document],
+        context: str,
+    ) -> None:
+        self.question = question
+        self.retrieval_query = retrieval_query
+        self.history_messages = history_messages
+        self.documents = documents
+        self.context = context
 
 
 class CVChatEngine:
@@ -47,18 +53,24 @@ class CVChatEngine:
         vector_manager: Any | None = None,
         loader: CVDocumentLoader | None = None,
         llm: Any | None = None,
+        settings: Settings | None = None,
     ):
+        self.settings = settings or get_settings()
         if vector_manager is None or llm is None:
-            Config.validate()
-        self.vector_manager = vector_manager or VectorStoreManager()
-        self.loader = loader or CVDocumentLoader()
+            self.settings.validate_runtime()
+        self.vector_manager = vector_manager or VectorStoreManager(
+            persist_dir=self.settings.VECTOR_DB_DIR,
+        )
+        self.loader = loader or CVDocumentLoader(
+            documents_dir=self.settings.DOCUMENTS_DIR,
+        )
         self.llm = llm or ChatNVIDIA(
-            model=Config.LLM_MODEL,
-            api_key=Config.NVIDIA_API_KEY,
+            model=self.settings.LLM_MODEL,
+            api_key=self.settings.NVIDIA_API_KEY,
             temperature=0.2,
             top_p=0.7,
             max_tokens=800,
-            timeout=Config.REQUEST_TIMEOUT,
+            timeout=self.settings.REQUEST_TIMEOUT,
         )
         if auto_index:
             self.ensure_indexed()
@@ -128,7 +140,7 @@ class CVChatEngine:
             rewritten = chain.invoke(
                 {"history": repr(chat_history), "question": question}
             ).strip()
-            return rewritten[: Config.MAX_QUESTION_CHARS] or question
+            return rewritten[: self.settings.MAX_QUESTION_CHARS] or question
         except Exception as exc:
             LOGGER.warning("Question rewrite failed (type=%s)", type(exc).__name__)
             return question
@@ -171,11 +183,13 @@ class CVChatEngine:
         k: int | None = None,
     ) -> PreparedQuery:
         """Validates a question and retrieves the evidence needed for generation."""
-        normalized_question = Config.validate_question(question)
-        history = self.normalize_history(chat_history)
+        normalized_question = self.settings.validate_question(question)
+        history = self.normalize_history(
+            chat_history, max_turns=self.settings.MAX_HISTORY_TURNS
+        )
         retrieval_query = self.prepare_retrieval_query(normalized_question, history)
         raw_documents = self.vector_manager.similarity_search(
-            retrieval_query, k=k or Config.RETRIEVAL_K
+            retrieval_query, k=k or self.settings.RETRIEVAL_K
         )
 
         # Deduplicate retrieved chunks while preserving ranked relevance order
@@ -222,9 +236,9 @@ class CVChatEngine:
         try:
             answer = retry_transient(
                 lambda: chain.invoke(payload),
-                Config.MAX_RETRIES,
+                self.settings.MAX_RETRIES,
                 operation_name="chat_generation",
-                model=str(Config.LLM_MODEL),
+                model=str(self.settings.LLM_MODEL),
             )
         except Exception as exc:
             if is_transient_error(exc):
@@ -259,12 +273,19 @@ class CVChatEngine:
             "chat_history": prepared.history_messages,
             "question": prepared.question,
         }
-        return self._stream_once(chain, payload)
+        return self._stream_once(
+            chain, payload, max_retries=self.settings.MAX_RETRIES
+        )
 
-    @staticmethod
-    def _stream_once(chain: Any, payload: dict[str, Any]) -> Iterator[str]:
+    @classmethod
+    def _stream_once(
+        cls,
+        chain: Any,
+        payload: dict[str, Any],
+        max_retries: int | None = None,
+    ) -> Iterator[str]:
         """Streams token generator; retries before first yield on transient error without duplicating tokens."""
-        max_attempts = Config.MAX_RETRIES
+        max_attempts = max_retries if max_retries is not None else get_settings().MAX_RETRIES
         for attempt in range(max_attempts):
             started = False
             try:
@@ -274,13 +295,13 @@ class CVChatEngine:
                         yield str(chunk)
                 return
             except Exception as exc:
-                # If stream already started yielding tokens, abort rather than replay duplicate tokens
+                # If stream already started yielding tokens, raise rather than replay duplicate tokens
                 if started:
                     LOGGER.warning(
                         "Provider stream interrupted mid-generation (type=%s)",
                         type(exc).__name__,
                     )
-                    return
+                    raise
                 # If failed before first token, retry transient network/endpoint error
                 if attempt < max_attempts - 1 and is_transient_error(exc):
                     LOGGER.info(
@@ -292,4 +313,3 @@ class CVChatEngine:
                 if is_transient_error(exc):
                     raise ProviderUnavailableError() from exc
                 raise
-
