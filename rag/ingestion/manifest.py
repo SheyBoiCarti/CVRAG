@@ -32,7 +32,7 @@ class IndexManifest:
     index_fingerprint: str
     embedding_model: str
     chunk_strategy: str
-    chunk_parameters: Mapping[str, int]
+    chunk_parameters: Mapping[str, Any]
     sources: tuple[SourceFileEntry, ...]
     chunk_count: int
     chunk_ids_sha256: str
@@ -42,6 +42,7 @@ class IndexManifest:
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["sources"] = [source.to_dict() for source in self.sources]
+        data["chunk_parameters"] = dict(self.chunk_parameters)
         return data
 
     @classmethod
@@ -55,7 +56,7 @@ class IndexManifest:
             index_fingerprint=str(data["index_fingerprint"]),
             embedding_model=str(data["embedding_model"]),
             chunk_strategy=str(data["chunk_strategy"]),
-            chunk_parameters={str(k): int(v) for k, v in dict(data["chunk_parameters"]).items()},
+            chunk_parameters=dict(data["chunk_parameters"]),
             sources=tuple(SourceFileEntry(**entry) for entry in data["sources"]),
             chunk_count=int(data["chunk_count"]),
             chunk_ids_sha256=str(data["chunk_ids_sha256"]),
@@ -89,7 +90,7 @@ def compute_index_fingerprint(
     *,
     corpus_fingerprint: str,
     chunk_strategy: str,
-    chunk_parameters: Mapping[str, int],
+    chunk_parameters: Mapping[str, Any],
     embedding_model: str,
     schema_version: str,
 ) -> str:

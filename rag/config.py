@@ -57,12 +57,40 @@ class _ConfigMeta(type):
         return cls._overrides.get("VECTOR_DB_DIR", cls._get_settings().VECTOR_DB_DIR)
 
     @property
+    def CHUNK_STRATEGY(cls) -> str:
+        return cls._overrides.get("CHUNK_STRATEGY", cls._get_settings().CHUNK_STRATEGY)
+
+    @property
     def CHUNK_SIZE(cls) -> int:
         return cls._overrides.get("CHUNK_SIZE", cls._get_settings().CHUNK_SIZE)
 
     @property
     def CHUNK_OVERLAP(cls) -> int:
         return cls._overrides.get("CHUNK_OVERLAP", cls._get_settings().CHUNK_OVERLAP)
+
+    @property
+    def SEMANTIC_BREAK_THRESHOLD(cls) -> float:
+        return cls._overrides.get("SEMANTIC_BREAK_THRESHOLD", cls._get_settings().SEMANTIC_BREAK_THRESHOLD)
+
+    @property
+    def SEMANTIC_MIN_CHARS(cls) -> int:
+        return cls._overrides.get("SEMANTIC_MIN_CHARS", cls._get_settings().SEMANTIC_MIN_CHARS)
+
+    @property
+    def SEMANTIC_MAX_CHARS(cls) -> int:
+        return cls._overrides.get("SEMANTIC_MAX_CHARS", cls._get_settings().SEMANTIC_MAX_CHARS)
+
+    @property
+    def SEMANTIC_OVERLAP_UNITS(cls) -> int:
+        return cls._overrides.get("SEMANTIC_OVERLAP_UNITS", cls._get_settings().SEMANTIC_OVERLAP_UNITS)
+
+    @property
+    def STRUCTURE_MAX_CHARS(cls) -> int:
+        return cls._overrides.get("STRUCTURE_MAX_CHARS", cls._get_settings().STRUCTURE_MAX_CHARS)
+
+    @property
+    def STRUCTURE_OVERLAP_CHARS(cls) -> int:
+        return cls._overrides.get("STRUCTURE_OVERLAP_CHARS", cls._get_settings().STRUCTURE_OVERLAP_CHARS)
 
     @property
     def RETRIEVAL_K(cls) -> int:

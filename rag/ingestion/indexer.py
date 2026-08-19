@@ -11,6 +11,8 @@ from typing import Sequence
 
 from langchain_core.embeddings import Embeddings
 
+from rag.ingestion.chunking.base import Chunker
+from rag.ingestion.chunking.factory import create_chunker
 from rag.ingestion.loader import CanonicalDocumentLoader
 from rag.ingestion.manifest import ActiveIndexPointer, IndexManifest, compute_corpus_fingerprint, compute_index_fingerprint, dump_json, manifest_sha256
 from rag.ingestion.snapshots import read_chunks_snapshot, validate_snapshot, write_chunks_snapshot
@@ -30,10 +32,11 @@ class ActiveIndex:
 class IndexSynchronizer:
     """Synchronizes one canonical corpus snapshot to Chroma and an active pointer."""
 
-    def __init__(self, *, settings: Settings, embeddings: Embeddings) -> None:
+    def __init__(self, *, settings: Settings, embeddings: Embeddings, chunker: Chunker | None = None) -> None:
         self.settings = settings
         self.embeddings = embeddings
-        self.loader = CanonicalDocumentLoader(settings.DOCUMENTS_DIR, chunk_size=settings.CHUNK_SIZE, chunk_overlap=settings.CHUNK_OVERLAP)
+        self.chunker = chunker or create_chunker(settings, embeddings=embeddings)
+        self.loader = CanonicalDocumentLoader(settings.DOCUMENTS_DIR, chunker=self.chunker)
         self.indexes_dir = settings.VECTOR_DB_DIR / "indexes"
         self.pointer_path = settings.VECTOR_DB_DIR / "active-index.json"
 
@@ -41,10 +44,13 @@ class IndexSynchronizer:
         """Reuses a validated matching build or atomically activates a replacement."""
         sources = self.loader.source_entries()
         corpus_fingerprint = compute_corpus_fingerprint(sources)
+        chunk_strategy = self.chunker.strategy_name
+        chunk_parameters = self.chunker.parameters()
+
         index_fingerprint = compute_index_fingerprint(
             corpus_fingerprint=corpus_fingerprint,
-            chunk_strategy="recursive_bullet_v1",
-            chunk_parameters={"chunk_size": self.settings.CHUNK_SIZE, "chunk_overlap": self.settings.CHUNK_OVERLAP},
+            chunk_strategy=chunk_strategy,
+            chunk_parameters=chunk_parameters,
             embedding_model=self.settings.EMBEDDING_MODEL,
             schema_version=self.settings.INDEX_SCHEMA_VERSION,
         )
@@ -60,11 +66,19 @@ class IndexSynchronizer:
         snapshot_path = build_dir / "chunks.jsonl"
         snapshot_sha, ids_sha = write_chunks_snapshot(chunks, snapshot_path)
         building = IndexManifest(
-            schema_version=self.settings.INDEX_SCHEMA_VERSION, index_id=index_id, collection_name=collection_name,
-            build_state="building", corpus_fingerprint=corpus_fingerprint, index_fingerprint=index_fingerprint,
-            embedding_model=self.settings.EMBEDDING_MODEL, chunk_strategy="recursive_bullet_v1",
-            chunk_parameters={"chunk_size": self.settings.CHUNK_SIZE, "chunk_overlap": self.settings.CHUNK_OVERLAP},
-            sources=sources, chunk_count=len(chunks), chunk_ids_sha256=ids_sha, chunks_snapshot_sha256=snapshot_sha,
+            schema_version=self.settings.INDEX_SCHEMA_VERSION,
+            index_id=index_id,
+            collection_name=collection_name,
+            build_state="building",
+            corpus_fingerprint=corpus_fingerprint,
+            index_fingerprint=index_fingerprint,
+            embedding_model=self.settings.EMBEDDING_MODEL,
+            chunk_strategy=chunk_strategy,
+            chunk_parameters=chunk_parameters,
+            sources=sources,
+            chunk_count=len(chunks),
+            chunk_ids_sha256=ids_sha,
+            chunks_snapshot_sha256=snapshot_sha,
         )
         manifest_path = build_dir / "manifest.json"
         self._write_json(manifest_path, building.to_dict())
