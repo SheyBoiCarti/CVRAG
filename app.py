@@ -75,41 +75,43 @@ if active_query:
             st.write(active_query)
 
     with st.chat_message("assistant"):
-        stage = "retrieval"
+        stage = "pipeline"
         try:
-            # Bound conversational turns passed to LLM to prevent context overflow
             history_tuples = [(h[0], h[1]) for h in st.session_state.chat_history[-4:]]
+            answer_placeholder = st.empty()
+            accumulated_answer = ""
+            final_result = None
 
-            with st.spinner("Searching CV..."):
-                prepared = pipeline.prepare_query(
-                    question=active_query, chat_history=history_tuples
-                )
+            with st.spinner("Searching CV & verifying answer..."):
+                for event in pipeline.stream(question=active_query, history=history_tuples):
+                    if event.event == "answer_delta":
+                        accumulated_answer += event.data.get("delta", "")
+                        answer_placeholder.markdown(accumulated_answer)
+                    elif event.event == "answer_completed":
+                        final_result = event.data.get("result")
+                        if final_result is not None:
+                            if event.data.get("replace_streamed_answer", False):
+                                answer_placeholder.markdown(final_result.answer)
+                            accumulated_answer = final_result.answer
+                    elif event.event == "error":
+                        err_msg = event.data.get("message", "The stream was interrupted.")
+                        answer_placeholder.markdown(err_msg)
+                        accumulated_answer = err_msg
 
-            retrieved_docs = prepared.documents
-            if retrieved_docs:
-                stage = "generation"
-                with st.spinner("Generating answer..."):
-                    answer = st.write_stream(pipeline.stream_prepared(prepared))
-            else:
-                answer = NO_RESULTS_ANSWER
-                st.markdown(answer)
+            answer = accumulated_answer
+            citations = final_result.citations if final_result is not None else ()
+            sources = sorted({Path(str(c.source)).name for c in citations})
 
-            sources = sorted(
-                {
-                    Path(str(doc.metadata.get("source", "CV"))).name
-                    for doc in retrieved_docs
-                }
-            )
-
-            if sources:
+            if citations:
                 label = get_human_source_label(sources)
                 with st.expander(label):
-                    for i, doc in enumerate(retrieved_docs, 1):
-                        content = getattr(doc, "page_content", getattr(doc, "excerpt", str(doc)))
+                    for i, cit in enumerate(citations, 1):
+                        status_badge = f" — [{cit.support_status}]" if cit.support_status else ""
                         st.markdown(
-                            f"<div class='source-snippet'><div class='source-snippet-header'>Reference Snippet #{i}</div>{content}</div>",
+                            f"<div class='source-snippet'><div class='source-snippet-header'>Citation [{cit.evidence_id}] ({cit.source}, p.{cit.page}){status_badge}</div>{cit.excerpt}</div>",
                             unsafe_allow_html=True,
                         )
+            retrieved_items = citations
         except Exception as exc:
             LOGGER.warning(
                 "CV query failed (stage=%s, type=%s)",
@@ -118,9 +120,9 @@ if active_query:
             )
             answer = query_error_message(exc)
             st.markdown(answer)
-            sources, retrieved_docs = [], []
+            sources, retrieved_items = [], ()
 
     st.session_state.chat_history.append(
-        (active_query, answer, sources, retrieved_docs)
+        (active_query, answer, sources, retrieved_items)
     )
     st.rerun()

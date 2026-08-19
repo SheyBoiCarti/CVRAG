@@ -35,8 +35,11 @@ def render_chat_history(chat_history: list[tuple[Any, ...]]):
                 with st.expander(label):
                     for i, doc in enumerate(docs, 1):
                         content = getattr(doc, "page_content", getattr(doc, "excerpt", str(doc)))
+                        ev_id = getattr(doc, "evidence_id", f"S{i}")
+                        status = getattr(doc, "support_status", "")
+                        status_badge = f" — [{status}]" if status else ""
                         st.markdown(
-                            f"<div class='source-snippet'><div class='source-snippet-header'>Reference Snippet #{i}</div>{content}</div>",
+                            f"<div class='source-snippet'><div class='source-snippet-header'>Citation [{ev_id}]{status_badge}</div>{content}</div>",
                             unsafe_allow_html=True,
                         )
 
