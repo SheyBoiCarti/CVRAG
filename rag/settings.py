@@ -4,11 +4,18 @@ from dataclasses import dataclass, field
 import hashlib
 import os
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+ALLOWED_CHUNK_STRATEGIES: set[str] = {
+    "recursive_bullet_v1",
+    "fixed_character_v1",
+    "structure_aware_v1",
+    "semantic_v1",
+}
 
 
 def make_collection_name(schema_version: str, embedding_model: str) -> str:
@@ -28,8 +35,15 @@ class Settings:
     EMBEDDING_MODEL: str = "nvidia/nv-embedqa-e5-v5"
     DOCUMENTS_DIR: Path = field(default_factory=lambda: (BASE_DIR / "documents").resolve())
     VECTOR_DB_DIR: Path = field(default_factory=lambda: (BASE_DIR / "vector_db").resolve())
+    CHUNK_STRATEGY: str = "recursive_bullet_v1"
     CHUNK_SIZE: int = 700
     CHUNK_OVERLAP: int = 140
+    SEMANTIC_BREAK_THRESHOLD: float = 0.35
+    SEMANTIC_MIN_CHARS: int = 200
+    SEMANTIC_MAX_CHARS: int = 900
+    SEMANTIC_OVERLAP_UNITS: int = 1
+    STRUCTURE_MAX_CHARS: int = 700
+    STRUCTURE_OVERLAP_CHARS: int = 140
     RETRIEVAL_K: int = 6
     RETRIEVAL_MODE: str = "dense"
     DENSE_CANDIDATE_K: int = 20
@@ -82,13 +96,35 @@ class Settings:
                 raise ValueError(f"Wildcard CORS origins are not allowed: '{origin}'")
         object.__setattr__(self, "API_CORS_ORIGINS", origins)
 
-        # Numerical and parameter bounds validation
+        # Chunking strategy and parameter validation
+        if self.CHUNK_STRATEGY not in ALLOWED_CHUNK_STRATEGIES:
+            raise ValueError(
+                f"Invalid CHUNK_STRATEGY '{self.CHUNK_STRATEGY}'. Must be one of {sorted(ALLOWED_CHUNK_STRATEGIES)}"
+            )
         if self.CHUNK_SIZE <= 0:
             raise ValueError("CHUNK_SIZE must be positive.")
         if self.CHUNK_OVERLAP < 0:
             raise ValueError("CHUNK_OVERLAP cannot be negative.")
         if self.CHUNK_OVERLAP >= self.CHUNK_SIZE:
             raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_SIZE.")
+        if not (0.0 <= self.SEMANTIC_BREAK_THRESHOLD <= 2.0):
+            raise ValueError("SEMANTIC_BREAK_THRESHOLD must be between 0.0 and 2.0.")
+        if self.SEMANTIC_MIN_CHARS <= 0:
+            raise ValueError("SEMANTIC_MIN_CHARS must be positive.")
+        if self.SEMANTIC_MAX_CHARS <= 0:
+            raise ValueError("SEMANTIC_MAX_CHARS must be positive.")
+        if self.SEMANTIC_MIN_CHARS >= self.SEMANTIC_MAX_CHARS:
+            raise ValueError("SEMANTIC_MIN_CHARS must be strictly less than SEMANTIC_MAX_CHARS.")
+        if self.SEMANTIC_OVERLAP_UNITS not in (0, 1):
+            raise ValueError("SEMANTIC_OVERLAP_UNITS must be 0 or 1.")
+        if self.STRUCTURE_MAX_CHARS <= 0:
+            raise ValueError("STRUCTURE_MAX_CHARS must be positive.")
+        if self.STRUCTURE_OVERLAP_CHARS < 0:
+            raise ValueError("STRUCTURE_OVERLAP_CHARS cannot be negative.")
+        if self.STRUCTURE_OVERLAP_CHARS >= self.STRUCTURE_MAX_CHARS:
+            raise ValueError("STRUCTURE_OVERLAP_CHARS must be smaller than STRUCTURE_MAX_CHARS.")
+
+        # Numerical and parameter bounds validation
         if not (1 <= self.RETRIEVAL_K <= 12):
             raise ValueError("RETRIEVAL_K must be between 1 and 12.")
         if self.RETRIEVAL_MODE not in {"dense", "hybrid"}:
@@ -125,6 +161,28 @@ class Settings:
     def COLLECTION_NAME(self) -> str:
         """Derives a deterministic Chroma collection name based on schema version and embedding model."""
         return make_collection_name(self.INDEX_SCHEMA_VERSION, self.EMBEDDING_MODEL)
+
+    def chunk_parameters(self) -> dict[str, Any]:
+        """Returns the effective strategy-specific chunk parameters."""
+        if self.CHUNK_STRATEGY in ("recursive_bullet_v1", "fixed_character_v1"):
+            return {
+                "chunk_overlap": self.CHUNK_OVERLAP,
+                "chunk_size": self.CHUNK_SIZE,
+            }
+        if self.CHUNK_STRATEGY == "structure_aware_v1":
+            return {
+                "max_chars": self.STRUCTURE_MAX_CHARS,
+                "overlap_chars": self.STRUCTURE_OVERLAP_CHARS,
+            }
+        if self.CHUNK_STRATEGY == "semantic_v1":
+            return {
+                "break_threshold": self.SEMANTIC_BREAK_THRESHOLD,
+                "embedding_model": self.EMBEDDING_MODEL,
+                "max_chars": self.SEMANTIC_MAX_CHARS,
+                "min_chars": self.SEMANTIC_MIN_CHARS,
+                "overlap_units": self.SEMANTIC_OVERLAP_UNITS,
+            }
+        return {}
 
     def validate_question(self, question: str) -> str:
         """Sanitizes and enforces length boundaries on user inputs."""
@@ -182,10 +240,24 @@ def get_settings(environ: Mapping[str, str] | None = None) -> Settings:
         kwargs["DOCUMENTS_DIR"] = Path(env["DOCUMENTS_DIR"])
     if "VECTOR_DB_DIR" in env:
         kwargs["VECTOR_DB_DIR"] = Path(env["VECTOR_DB_DIR"])
+    if "CHUNK_STRATEGY" in env:
+        kwargs["CHUNK_STRATEGY"] = env["CHUNK_STRATEGY"]
     if "CHUNK_SIZE" in env:
         kwargs["CHUNK_SIZE"] = int(env["CHUNK_SIZE"])
     if "CHUNK_OVERLAP" in env:
         kwargs["CHUNK_OVERLAP"] = int(env["CHUNK_OVERLAP"])
+    if "SEMANTIC_BREAK_THRESHOLD" in env:
+        kwargs["SEMANTIC_BREAK_THRESHOLD"] = float(env["SEMANTIC_BREAK_THRESHOLD"])
+    if "SEMANTIC_MIN_CHARS" in env:
+        kwargs["SEMANTIC_MIN_CHARS"] = int(env["SEMANTIC_MIN_CHARS"])
+    if "SEMANTIC_MAX_CHARS" in env:
+        kwargs["SEMANTIC_MAX_CHARS"] = int(env["SEMANTIC_MAX_CHARS"])
+    if "SEMANTIC_OVERLAP_UNITS" in env:
+        kwargs["SEMANTIC_OVERLAP_UNITS"] = int(env["SEMANTIC_OVERLAP_UNITS"])
+    if "STRUCTURE_MAX_CHARS" in env:
+        kwargs["STRUCTURE_MAX_CHARS"] = int(env["STRUCTURE_MAX_CHARS"])
+    if "STRUCTURE_OVERLAP_CHARS" in env:
+        kwargs["STRUCTURE_OVERLAP_CHARS"] = int(env["STRUCTURE_OVERLAP_CHARS"])
     if "RETRIEVAL_K" in env:
         kwargs["RETRIEVAL_K"] = int(env["RETRIEVAL_K"])
     for key in ("RETRIEVAL_MODE", "RERANK_MODEL"):

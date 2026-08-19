@@ -7,6 +7,7 @@ import threading
 import time
 from unittest.mock import MagicMock
 
+from fastapi import Request
 from fastapi.testclient import TestClient
 import pytest
 
@@ -461,6 +462,10 @@ def test_chat_sync_end_to_end_with_fake_providers(tmp_path: Path) -> None:
         assert payload["decision"] == "answered"
         assert len(payload["citations"]) >= 1
         assert payload["citations"][0]["source"] == "sample_cv.txt"
+    app.state.pipeline = None
+    del pipeline
+    import gc
+    gc.collect()
 
 
 def _parse_sse_events(raw_text: str) -> list[dict]:
@@ -972,6 +977,10 @@ def test_chat_stream_end_to_end_with_fake_providers(tmp_path: Path) -> None:
             assert events[-1]["event"] == "answer_completed"
             assert "Alice Smith" in events[-1]["data"]["result"]["answer"]
             assert events[-1]["data"]["result"]["citations"][0]["source"] == "sample_cv.txt"
+    app.state.pipeline = None
+    del pipeline
+    import gc
+    gc.collect()
 
 
 def test_chat_sync_chunked_body_exceeding_limit_returns_413(tmp_path: Path) -> None:
@@ -1045,9 +1054,13 @@ def test_multiple_chat_requests_reuse_single_pipeline_instance(tmp_path: Path) -
         assert res2.status_code == 200
 
         assert app.state.pipeline is pipeline
+    app.state.pipeline = None
+    del pipeline
+    import gc
+    gc.collect()
 
 
-def test_chat_stream_client_disconnect_stops_producer(tmp_path: Path) -> None:
+def test_chat_stream_client_disconnect_stops_producer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Disconnecting from SSE stream terminates the producer loop and releases concurrency capacity."""
     settings = Settings(
         NVIDIA_API_KEY="mock-key",
@@ -1061,18 +1074,33 @@ def test_chat_stream_client_disconnect_stops_producer(tmp_path: Path) -> None:
     producer_closed = threading.Event()
 
     class CancellableGenerator:
+        def __init__(self):
+            self.stopped = False
+            self.count = 0
+
         def __iter__(self):
             return self
 
         def __next__(self):
-            time.sleep(0.05)
-            return PipelineEvent.create("answer_delta", {"delta": "token "}, request_id="req-d", sequence=1)
+            if self.stopped or self.count >= 20:
+                raise StopIteration
+            self.count += 1
+            return PipelineEvent.create("answer_delta", {"delta": "token "}, request_id="req-d", sequence=self.count)
 
         def close(self):
+            self.stopped = True
             producer_closed.set()
 
     mock_pipeline.stream.return_value = CancellableGenerator()
     app = create_app(settings=settings, pipeline=mock_pipeline)
+
+    disconnect_called = [0]
+
+    async def fake_is_disconnected(self):
+        disconnect_called[0] += 1
+        return disconnect_called[0] >= 3
+
+    monkeypatch.setattr(Request, "is_disconnected", fake_is_disconnected)
 
     with TestClient(app) as client:
         with client.stream("POST", "/api/v1/chat/stream", json={"question": "Test disconnect"}) as res:

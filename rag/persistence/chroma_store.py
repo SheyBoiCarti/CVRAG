@@ -25,11 +25,24 @@ class ChromaStoreAdapter:
     ) -> None:
         self.persist_dir = Path(persist_dir)
         self.collection_name = collection_name
+        self._embeddings = embeddings
         self._store = Chroma(
             persist_directory=str(self.persist_dir),
             embedding_function=embeddings,
             collection_name=collection_name,
         )
+
+    def clear(self) -> None:
+        """Deletes the underlying collection to ensure a clean build slate."""
+        try:
+            self._store.delete_collection()
+            self._store = Chroma(
+                persist_directory=str(self.persist_dir),
+                embedding_function=self._embeddings,
+                collection_name=self.collection_name,
+            )
+        except Exception:
+            pass
 
     def count(self) -> int:
         """Returns the number of records in this collection."""
