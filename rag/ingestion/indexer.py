@@ -83,6 +83,7 @@ class IndexSynchronizer:
         manifest_path = build_dir / "manifest.json"
         self._write_json(manifest_path, building.to_dict())
         store = ChromaStoreAdapter(persist_dir=self.settings.VECTOR_DB_DIR, collection_name=collection_name, embeddings=self.embeddings)
+        store.clear()
         store.add_chunks(chunks)
         if store.count() != len(chunks) or store.get_existing_ids([chunk.chunk_id for chunk in chunks]) != {chunk.chunk_id for chunk in chunks}:
             raise RuntimeError("Chroma collection validation failed; active index was not replaced.")

@@ -124,6 +124,59 @@ def create_app(
             allow_headers=["*"],
         )
 
+    @app.middleware("http")
+    async def limit_body_size_middleware(request: Request, call_next):
+        cl = request.headers.get("content-length")
+        if cl:
+            try:
+                if int(cl) > resolved_settings.API_MAX_BODY_BYTES:
+                    error_resp = ErrorResponse(
+                        error=ErrorDetail(
+                            code="request_too_large",
+                            message=f"Request body size ({cl} bytes) exceeds limit of {resolved_settings.API_MAX_BODY_BYTES} bytes.",
+                            retryable=False,
+                        )
+                    )
+                    return JSONResponse(
+                        status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                        content=error_resp.model_dump(),
+                    )
+            except ValueError:
+                pass
+            return await call_next(request)
+
+        # Chunked or streaming request without Content-Length
+        body_chunks: list[bytes] = []
+        total_bytes = 0
+        is_too_large = False
+        async for chunk in request.stream():
+            total_bytes += len(chunk)
+            if total_bytes > resolved_settings.API_MAX_BODY_BYTES:
+                is_too_large = True
+                break
+            body_chunks.append(chunk)
+
+        if is_too_large:
+            error_resp = ErrorResponse(
+                error=ErrorDetail(
+                    code="request_too_large",
+                    message=f"Request body size exceeds limit of {resolved_settings.API_MAX_BODY_BYTES} bytes.",
+                    retryable=False,
+                )
+            )
+            return JSONResponse(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                content=error_resp.model_dump(),
+            )
+
+        full_body = b"".join(body_chunks)
+
+        async def receive():
+            return {"type": "http.request", "body": full_body, "more_body": False}
+
+        reconstructed_request = Request(request.scope, receive=receive)
+        return await call_next(reconstructed_request)
+
     # Safe error exception handlers
     @app.exception_handler(ProviderUnavailableError)
     async def provider_unavailable_handler(
@@ -147,7 +200,7 @@ def create_app(
     ) -> JSONResponse:
         error_resp = ErrorResponse(
             error=ErrorDetail(
-                code="internal_error",
+                code="rag_error",
                 message="An internal RAG pipeline error occurred.",
                 retryable=False,
             )
@@ -191,15 +244,24 @@ def create_app(
     ) -> JSONResponse:
         sanitized_errors = []
         is_history_error = False
+        is_question_error = False
         for err in exc.errors():
             loc = [str(item) for item in err.get("loc", ())]
             if "history" in loc:
                 is_history_error = True
+            if "question" in loc:
+                is_question_error = True
             msg = str(err.get("msg", "Invalid value"))
             err_type = str(err.get("type", "value_error"))
             sanitized_errors.append({"loc": loc, "msg": msg, "type": err_type})
 
-        err_code = "invalid_history" if is_history_error else "invalid_question"
+        if is_history_error:
+            err_code = "invalid_history"
+        elif is_question_error:
+            err_code = "invalid_question"
+        else:
+            err_code = "validation_error"
+
         error_resp = ErrorResponse(
             error=ErrorDetail(
                 code=err_code,

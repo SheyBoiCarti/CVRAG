@@ -37,7 +37,7 @@ router = APIRouter()
 
 
 def format_sse_event(event: PipelineEvent) -> str:
-    """Formats a PipelineEvent envelope into standard SSE wire format: `data: {...}\\n\\n`."""
+    """Formats a PipelineEvent envelope into standard SSE wire format: `data: {...}\n\n`."""
     return event.to_sse()
 
 
@@ -456,10 +456,9 @@ async def chat_stream(
                     if item.event in ("answer_completed", "error"):
                         break
 
-        except asyncio.CancelledError:
-            LOGGER.info("Streaming response task cancelled (request_id=%s)", req_id)
+        except (asyncio.CancelledError, GeneratorExit):
+            LOGGER.info("Streaming response task cancelled/closed (request_id=%s)", req_id)
             stop_event.set()
-            raise
         except Exception as exc:
             LOGGER.warning("Unhandled error during stream consumption (request_id=%s, type=%s)", req_id, type(exc).__name__)
             if not terminal_emitted and not stop_event.is_set():

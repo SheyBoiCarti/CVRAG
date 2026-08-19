@@ -142,6 +142,8 @@ def generate_markdown_matrix_report(results: Mapping[str, Any]) -> str:
     lines: list[str] = [
         "# Chunking Experiment Matrix Report",
         "",
+        "## 1. Summary Comparison",
+        "",
         "| Configuration | Strategy | Chunks | Mean Len | Build (ms) | MRR | Hit Rate | All-Evidence Recall | Cit F1 | Ret Lat p50 (ms) |",
         "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |",
     ]
@@ -167,10 +169,28 @@ def generate_markdown_matrix_report(results: Mapping[str, Any]) -> str:
 
     lines.extend([
         "",
-        "## Selection Policy Evaluation",
+        "## 2. Chunk Distribution Analysis",
         "",
-        "- **Baseline Reference:** `recursive_bullet_v1_700_140`",
-        "- **Promotion Gate Criteria:** No regression on unanswerable/citation accuracy + measurable retrieval improvement.",
+        "| Configuration | Chunk Count | Min Chars | Max Chars | Mean Chars | p50 Chars | p90 Chars |",
+        "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |",
+    ])
+
+    for name, res in results.items():
+        stats = res.get("chunk_stats", {})
+        lines.append(
+            f"| `{name}` | {stats.get('count', 0)} | {stats.get('min_chars', 0)} | {stats.get('max_chars', 0)} | {round(stats.get('mean_chars', 0.0), 1)} | {round(stats.get('p50_chars', 0.0), 1)} | {round(stats.get('p90_chars', 0.0), 1)} |"
+        )
+
+    lines.extend([
+        "",
+        "## 3. Strategy Selection Decision & Recommendation",
+        "",
+        "- **Selected Default Strategy:** `recursive_bullet_v1` (`chunk_size=700`, `chunk_overlap=140`)",
+        "- **Decision Rationale:**",
+        "  1. `recursive_bullet_v1` provides guaranteed backward compatibility and deterministic chunk boundaries matching established golden anchors.",
+        "  2. `structure_aware_v1` produces granular section-bounded chunks and serves as an effective candidate for hierarchical/structured markdown retrieval.",
+        "  3. `semantic_v1` provides adaptive embedding-distance boundary segmentation while isolating non-deterministic variations.",
+        "  4. Under the Spec 04 promotion gate criteria, `recursive_bullet_v1` remains the default baseline until live hybrid+reranker cross-validation is completed.",
         "",
     ])
     return "\n".join(lines)
@@ -201,7 +221,10 @@ def main() -> None:
     dataset_path = Path(args.dataset)
     cases, dataset_hash = load_dataset(dataset_path)
 
-    base_settings = get_settings()
+    base_settings = Settings(
+        RETRIEVAL_MODE="hybrid",
+        RERANK_ENABLED=False,
+    )
     from tests.fakes import FakeProviderFactories
 
     runner = ChunkingMatrixRunner(

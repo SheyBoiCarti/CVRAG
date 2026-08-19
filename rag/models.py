@@ -81,11 +81,17 @@ class Citation:
     excerpt: str
     support_status: EvidenceSupportStatus = "not_checked"
 
+    def __post_init__(self) -> None:
+        if self.source:
+            norm_source = self.source.replace("\\", "/").rstrip("/").split("/")[-1]
+            object.__setattr__(self, "source", norm_source or self.source)
+
     def to_dict(self) -> dict[str, Any]:
+        norm_source = self.source.replace("\\", "/").rstrip("/").split("/")[-1] if self.source else ""
         return {
             "evidence_id": self.evidence_id,
             "chunk_id": self.chunk_id,
-            "source": self.source,
+            "source": norm_source,
             "page": self.page,
             "excerpt": self.excerpt,
             "support_status": self.support_status,
