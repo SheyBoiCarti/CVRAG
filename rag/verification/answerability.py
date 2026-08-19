@@ -13,14 +13,17 @@ from rag.verification.models import CalibrationPolicyArtifact
 LOGGER = logging.getLogger(__name__)
 
 
-def extract_answerability_signals(retrieval_result: Any) -> AnswerabilitySignals:
+def extract_answerability_signals(
+    retrieval_result: Any,
+    documents_count: int | None = None,
+) -> AnswerabilitySignals:
     """Extracts diagnostic candidate signals from retrieval result stages.
 
     Missing signals remain None and are never silently converted to zero.
     """
     if retrieval_result is None:
         return AnswerabilitySignals(
-            retrieved_count=0,
+            retrieved_count=documents_count if documents_count is not None else 0,
             dense_sparse_overlap=None,
             top_rrf_score=None,
             top_reranker_score=None,
@@ -29,7 +32,7 @@ def extract_answerability_signals(retrieval_result: Any) -> AnswerabilitySignals
         )
 
     context = getattr(retrieval_result, "context", ()) or ()
-    retrieved_count = len(context)
+    retrieved_count = len(context) if context else (documents_count if documents_count is not None else 0)
 
     dense_candidates = getattr(retrieval_result, "dense_candidates", ()) or ()
     sparse_candidates = getattr(retrieval_result, "sparse_candidates", ()) or ()
