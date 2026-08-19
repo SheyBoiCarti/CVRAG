@@ -107,11 +107,7 @@ class FakeReranker:
         return documents
 
 
-class FakeSupportVerifier:
-    """Deterministic offline claim support verifier stub."""
-
-    def verify(self, claim: str, evidence: list[Any]) -> dict[str, Any]:
-        return {"status": "supported", "reason": "fake_verified"}
+from rag.verification.support import FakeSupportVerifier
 
 
 class FakeProviderFactories:

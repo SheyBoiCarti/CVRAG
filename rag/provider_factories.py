@@ -65,12 +65,24 @@ class LiveProviderFactories:
         )
 
     def create_reranker(self, settings: Settings) -> Any:
-        """Reranker stub for Phase 1 dense baseline."""
-        return None
+        """Creates an NVIDIA reranker client requiring configured API key."""
+        if not settings.NVIDIA_API_KEY:
+            raise ValueError("NVIDIA_API_KEY is not configured.")
+        from langchain_nvidia_ai_endpoints import NVIDIARerank
+
+        return NVIDIARerank(
+            model=settings.RERANK_MODEL,
+            api_key=settings.NVIDIA_API_KEY,
+            top_n=settings.RERANK_CANDIDATE_K,
+        )
 
     def create_support_verifier(self, settings: Settings) -> Any:
-        """Support verifier stub for Phase 1 dense baseline."""
-        return None
+        """Creates an NVIDIA claim support verifier requiring configured API key."""
+        if not settings.NVIDIA_API_KEY:
+            raise ValueError("NVIDIA_API_KEY is not configured.")
+        from rag.verification.support import NvidiaSupportVerifier
+
+        return NvidiaSupportVerifier(settings=settings)
 
 
 __all__ = ["LiveProviderFactories", "ProviderFactories"]
