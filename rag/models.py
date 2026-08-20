@@ -99,6 +99,30 @@ class Citation:
 
 
 @dataclass(frozen=True)
+class Claim:
+    """An individual atomic claim extracted from generated answer text."""
+
+    claim_id: str
+    text: str
+    citation_ids: tuple[str, ...] = ()
+    factual: bool = True
+    importance: ClaimImportance = "core"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.citation_ids, tuple):
+            object.__setattr__(self, "citation_ids", tuple(self.citation_ids))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "claim_id": self.claim_id,
+            "text": self.text,
+            "citation_ids": list(self.citation_ids),
+            "factual": self.factual,
+            "importance": self.importance,
+        }
+
+
+@dataclass(frozen=True)
 class ClaimVerification:
     """Verification outcome for an individual factual claim."""
 
@@ -123,6 +147,48 @@ class ClaimVerification:
             "citation_ids": list(self.citation_ids),
             "status": self.status,
             "reason_code": self.reason_code,
+        }
+
+
+@dataclass(frozen=True)
+class AnswerabilitySignals:
+    """Candidate diagnostic signals extracted from retrieval stages for answerability decisions."""
+
+    retrieved_count: int
+    dense_sparse_overlap: float | None = None
+    top_rrf_score: float | None = None
+    top_reranker_score: float | None = None
+    reranker_margin: float | None = None
+    retrieval_degraded: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "retrieved_count": self.retrieved_count,
+            "dense_sparse_overlap": self.dense_sparse_overlap,
+            "top_rrf_score": self.top_rrf_score,
+            "top_reranker_score": self.top_reranker_score,
+            "reranker_margin": self.reranker_margin,
+            "retrieval_degraded": self.retrieval_degraded,
+        }
+
+
+@dataclass(frozen=True)
+class AnswerabilityDecision:
+    """Decision outcome for pre-generation answerability evaluation."""
+
+    decision: Literal["answer", "abstain"]
+    reason_codes: tuple[str, ...] = ()
+    policy_version: str = "1.0"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reason_codes, tuple):
+            object.__setattr__(self, "reason_codes", tuple(self.reason_codes))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "decision": self.decision,
+            "reason_codes": list(self.reason_codes),
+            "policy_version": self.policy_version,
         }
 
 
@@ -246,7 +312,10 @@ __all__ = [
     "ChatTurn",
     "Evidence",
     "Citation",
+    "Claim",
     "ClaimVerification",
+    "AnswerabilitySignals",
+    "AnswerabilityDecision",
     "AnswerResult",
     "ReadinessResult",
     "PipelineEvent",

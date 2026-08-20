@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import logging
 import random
 import re
 import time
 from pathlib import Path
+from typing import Any
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document

@@ -4,30 +4,48 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any, Callable, Iterator, Sequence
 import uuid
 
 from langchain_core.output_parsers import StrOutputParser
 
 from rag.document_loader import CVDocumentLoader
+from rag.engine import CORRECTION_PROMPT, CVChatEngine, NO_RESULTS_ANSWER
+from rag.errors import ProviderUnavailableError
 from rag.ingestion.indexer import IndexSynchronizer
+from rag.models import (
+    AnswerResult,
+    ChatTurn,
+    Citation,
+    Evidence,
+    PipelineEvent,
+    ReadinessResult,
+)
 from rag.persistence.chroma_store import ChromaStoreAdapter
+from rag.provider_factories import LiveProviderFactories, ProviderFactories
 from rag.retrieval.bm25 import BM25Retriever
 from rag.retrieval.dense import DenseRetriever
 from rag.retrieval.reranker import NvidiaReranker, NoOpReranker
 from rag.retrieval.service import RetrievalService
-from rag.engine import CVChatEngine, NO_RESULTS_ANSWER
-from rag.errors import ProviderUnavailableError
-from rag.models import AnswerResult, ChatTurn, Citation, PipelineEvent, ReadinessResult
-from rag.provider_factories import LiveProviderFactories, ProviderFactories
 from rag.settings import Settings, get_settings
 from rag.vector_store import VectorStoreManager, is_transient_error, retry_transient
+from rag.verification.answerability import (
+    evaluate_pre_generation_answerability,
+    extract_answerability_signals,
+    load_calibration_policy,
+)
+from rag.verification.citation_parser import parse_claims
+from rag.verification.policy import (
+    STANDARD_ABSTENTION_TEXT,
+    execute_post_generation_policy,
+)
+from rag.verification.support import SupportVerifier
 
 LOGGER = logging.getLogger(__name__)
 
 
 class RAGPipeline:
-    """Facade orchestrating retrieval, query reformulation, answer generation, and event streaming."""
+    """Facade orchestrating retrieval, query reformulation, answer generation, verification, and event streaming."""
 
     def __init__(
         self,
@@ -38,6 +56,10 @@ class RAGPipeline:
         self.settings = settings or get_settings()
         self.provider_factories = provider_factories
         self._engine = engine
+        self._support_verifier: SupportVerifier | None = None
+        self._calibration_policy = load_calibration_policy(
+            self.settings.ANSWERABILITY_CALIBRATION_FILE
+        )
 
         if self._engine is None:
             try:
@@ -93,6 +115,19 @@ class RAGPipeline:
         if self._engine is None:
             self._engine = self._build_engine()
         return self._engine
+
+    def _get_support_verifier(self) -> SupportVerifier:
+        """Returns the active SupportVerifier, constructing it via provider factories on demand."""
+        if self._support_verifier is None:
+            if self.provider_factories is not None:
+                self._support_verifier = self.provider_factories.create_support_verifier(self.settings)
+            elif not self.settings.NVIDIA_API_KEY:
+                from rag.verification.support import FakeSupportVerifier
+
+                self._support_verifier = FakeSupportVerifier()
+            else:
+                self._support_verifier = LiveProviderFactories().create_support_verifier(self.settings)
+        return self._support_verifier
 
     @property
     def engine(self) -> CVChatEngine:
@@ -175,12 +210,48 @@ class RAGPipeline:
             )
         return tuple(citations)
 
+    def _build_evidence(self, documents: Sequence[Any]) -> tuple[Evidence, ...]:
+        """Converts retrieved Document objects into immutable Evidence domain models."""
+        evidence_list: list[Evidence] = []
+        for i, doc in enumerate(documents, 1):
+            evidence_id = str(doc.metadata.get("evidence_id") or f"S{i}")
+            chunk_id = str(doc.metadata.get("chunk_id") or "")
+            source = str(doc.metadata.get("source") or "CV")
+            raw_page = doc.metadata.get("page", 0)
+            page = int(raw_page) + 1
+            content = doc.page_content
+            evidence_list.append(
+                Evidence(
+                    evidence_id=evidence_id,
+                    chunk_id=chunk_id,
+                    content=content,
+                    source=source,
+                    page=page,
+                    metadata=dict(doc.metadata),
+                )
+            )
+        return tuple(evidence_list)
+
+    def _make_corrective_generator(
+        self, engine: CVChatEngine
+    ) -> Callable[[dict[str, Any]], str]:
+        """Creates a corrective generation callable invoked during 1-shot answer revision."""
+        def _generator(payload: dict[str, Any]) -> str:
+            chain = CORRECTION_PROMPT | engine.llm | StrOutputParser()
+            return retry_transient(
+                lambda: chain.invoke(payload),
+                self.settings.MAX_RETRIES,
+                operation_name="corrective_chat_generation",
+                model=str(self.settings.LLM_MODEL),
+            )
+        return _generator
+
     def answer(
         self,
         question: str,
         history: Sequence[ChatTurn | tuple[str, str]] = (),
     ) -> AnswerResult:
-        """Synchronously answers a user question grounded in retrieved CV evidence."""
+        """Synchronously answers a user question grounded in retrieved CV evidence with full verification."""
         sanitized_question = self.settings.validate_question(question)
         bounded_history = self._normalize_history(history)
         engine = self._get_engine()
@@ -196,13 +267,25 @@ class RAGPipeline:
                 raise ProviderUnavailableError() from exc
             raise
 
-        if not prepared.documents:
+        signals = extract_answerability_signals(
+            prepared.retrieval_result, documents_count=len(prepared.documents)
+        )
+        pre_decision = evaluate_pre_generation_answerability(
+            signals, policy_artifact=self._calibration_policy
+        )
+
+        if pre_decision.decision == "abstain":
+            abstention_answer = (
+                STANDARD_ABSTENTION_TEXT
+                if "insufficient_evidence" in pre_decision.reason_codes
+                else NO_RESULTS_ANSWER
+            )
             return AnswerResult(
-                answer=NO_RESULTS_ANSWER,
+                answer=abstention_answer,
                 citations=(),
                 claim_verifications=(),
                 decision="abstained",
-                reason_codes=("no_evidence",),
+                reason_codes=pre_decision.reason_codes,
                 retrieval_query=prepared.retrieval_query,
                 pipeline_version=self.settings.PIPELINE_VERSION,
             )
@@ -225,18 +308,27 @@ class RAGPipeline:
                 raise ProviderUnavailableError() from exc
             raise
 
-        cited_docs = engine.cited_documents(raw_answer, prepared.documents)
-        citations = self._build_citations(cited_docs)
-
-        return AnswerResult(
-            answer=raw_answer,
-            citations=citations,
-            claim_verifications=(),
-            decision="answered",
-            reason_codes=(),
-            retrieval_query=prepared.retrieval_query,
-            pipeline_version=self.settings.PIPELINE_VERSION,
+        evidence = self._build_evidence(prepared.documents)
+        verifier = self._get_support_verifier()
+        corrective_gen = self._make_corrective_generator(engine)
+        degraded_codes = (
+            getattr(prepared.retrieval_result, "degraded_reason_codes", ()) or ()
+            if prepared.retrieval_result is not None
+            else ()
         )
+
+        result, _ = execute_post_generation_policy(
+            raw_answer=raw_answer,
+            evidence=evidence,
+            verifier=verifier,
+            settings=self.settings,
+            generator_fn=corrective_gen,
+            degraded_reason_codes=degraded_codes,
+            retrieval_query=prepared.retrieval_query,
+            question=sanitized_question,
+            history_messages=prepared.history_messages,
+        )
+        return result
 
     def answer_with_trace(
         self,
@@ -303,14 +395,26 @@ class RAGPipeline:
         if not index_fingerprint:
             index_fingerprint = corpus_fingerprint
 
-        if not prepared.documents:
+        signals = extract_answerability_signals(
+            prepared.retrieval_result, documents_count=len(prepared.documents)
+        )
+        pre_decision = evaluate_pre_generation_answerability(
+            signals, policy_artifact=self._calibration_policy
+        )
+
+        if pre_decision.decision == "abstain":
             total_ms = (time.perf_counter() - start_total) * 1000.0
+            abstention_answer = (
+                STANDARD_ABSTENTION_TEXT
+                if "insufficient_evidence" in pre_decision.reason_codes
+                else NO_RESULTS_ANSWER
+            )
             ans_res = AnswerResult(
-                answer=NO_RESULTS_ANSWER,
+                answer=abstention_answer,
                 citations=(),
                 claim_verifications=(),
                 decision="abstained",
-                reason_codes=("no_evidence",),
+                reason_codes=pre_decision.reason_codes,
                 retrieval_query=prepared.retrieval_query,
                 pipeline_version=self.settings.PIPELINE_VERSION,
             )
@@ -322,7 +426,7 @@ class RAGPipeline:
                 fused_results=fused_results,
                 reranked_results=reranked_results,
                 answer_result=ans_res,
-                timings_ms={"retrieval_ms": retrieval_ms, "generation_ms": 0.0, "total_ms": total_ms},
+                timings_ms={"retrieval_ms": retrieval_ms, "generation_ms": 0.0, "verification_ms": 0.0, "total_ms": total_ms},
                 token_usage={},
                 configuration={
                     "RETRIEVAL_MODE": self.settings.RETRIEVAL_MODE,
@@ -360,20 +464,31 @@ class RAGPipeline:
                 raise ProviderUnavailableError() from exc
             raise
         generation_ms = (time.perf_counter() - start_gen) * 1000.0
+
+        start_ver = time.perf_counter()
+        evidence = self._build_evidence(prepared.documents)
+        verifier = self._get_support_verifier()
+        corrective_gen = self._make_corrective_generator(engine)
+        degraded_codes = (
+            getattr(prepared.retrieval_result, "degraded_reason_codes", ()) or ()
+            if prepared.retrieval_result is not None
+            else ()
+        )
+
+        ans_res, _ = execute_post_generation_policy(
+            raw_answer=raw_answer,
+            evidence=evidence,
+            verifier=verifier,
+            settings=self.settings,
+            generator_fn=corrective_gen,
+            degraded_reason_codes=degraded_codes,
+            retrieval_query=prepared.retrieval_query,
+            question=sanitized_question,
+            history_messages=prepared.history_messages,
+        )
+        verification_ms = (time.perf_counter() - start_ver) * 1000.0
         total_ms = (time.perf_counter() - start_total) * 1000.0
 
-        cited_docs = engine.cited_documents(raw_answer, prepared.documents)
-        citations = self._build_citations(cited_docs)
-
-        ans_res = AnswerResult(
-            answer=raw_answer,
-            citations=citations,
-            claim_verifications=(),
-            decision="answered",
-            reason_codes=(),
-            retrieval_query=prepared.retrieval_query,
-            pipeline_version=self.settings.PIPELINE_VERSION,
-        )
         trace = EvaluationTrace(
             case_id=case_id,
             retrieval_query=prepared.retrieval_query,
@@ -382,7 +497,12 @@ class RAGPipeline:
             fused_results=fused_results,
             reranked_results=reranked_results,
             answer_result=ans_res,
-            timings_ms={"retrieval_ms": retrieval_ms, "generation_ms": generation_ms, "total_ms": total_ms},
+            timings_ms={
+                "retrieval_ms": retrieval_ms,
+                "generation_ms": generation_ms,
+                "verification_ms": verification_ms,
+                "total_ms": total_ms,
+            },
             token_usage={},
             configuration={
                 "RETRIEVAL_MODE": self.settings.RETRIEVAL_MODE,
@@ -460,23 +580,41 @@ class RAGPipeline:
             return
 
         evidence_count = len(prepared.documents)
+        degraded_codes = list(
+            getattr(prepared.retrieval_result, "degraded_reason_codes", ()) or ()
+            if prepared.retrieval_result is not None
+            else ()
+        )
+
         # 2. Retrieval completed
         yield PipelineEvent.create(
             "retrieval_completed",
-            {"evidence_count": evidence_count, "degraded_reason_codes": []},
+            {"evidence_count": evidence_count, "degraded_reason_codes": degraded_codes},
             request_id=request_id,
             sequence=seq,
         )
         seq += 1
 
-        # Empty retrieval abstention: no generation_started, no LLM calls
-        if evidence_count == 0:
+        signals = extract_answerability_signals(
+            prepared.retrieval_result, documents_count=len(prepared.documents)
+        )
+        pre_decision = evaluate_pre_generation_answerability(
+            signals, policy_artifact=self._calibration_policy
+        )
+
+        # Pre-generation abstention: no generation_started, no LLM calls
+        if pre_decision.decision == "abstain":
+            abstention_answer = (
+                STANDARD_ABSTENTION_TEXT
+                if "insufficient_evidence" in pre_decision.reason_codes
+                else NO_RESULTS_ANSWER
+            )
             result = AnswerResult(
-                answer=NO_RESULTS_ANSWER,
+                answer=abstention_answer,
                 citations=(),
                 claim_verifications=(),
                 decision="abstained",
-                reason_codes=("no_evidence",),
+                reason_codes=pre_decision.reason_codes,
                 retrieval_query=prepared.retrieval_query,
                 pipeline_version=self.settings.PIPELINE_VERSION,
             )
@@ -525,21 +663,35 @@ class RAGPipeline:
             )
             return
 
-        # Terminal answer_completed
-        cited_docs = engine.cited_documents(accumulated_answer, prepared.documents)
-        citations = self._build_citations(cited_docs)
-        result = AnswerResult(
-            answer=accumulated_answer,
-            citations=citations,
-            claim_verifications=(),
-            decision="answered",
-            reason_codes=(),
-            retrieval_query=prepared.retrieval_query,
-            pipeline_version=self.settings.PIPELINE_VERSION,
+        # 4. Post-generation verification
+        initial_claims = parse_claims(accumulated_answer)
+        yield PipelineEvent.create(
+            "verification_started",
+            {"claim_count": len(initial_claims)},
+            request_id=request_id,
+            sequence=seq,
         )
+        seq += 1
+
+        evidence = self._build_evidence(prepared.documents)
+        verifier = self._get_support_verifier()
+        corrective_gen = self._make_corrective_generator(engine)
+
+        result, replace_streamed_answer = execute_post_generation_policy(
+            raw_answer=accumulated_answer,
+            evidence=evidence,
+            verifier=verifier,
+            settings=self.settings,
+            generator_fn=corrective_gen,
+            degraded_reason_codes=degraded_codes,
+            retrieval_query=prepared.retrieval_query,
+            question=question,
+            history_messages=prepared.history_messages,
+        )
+
         yield PipelineEvent.create(
             "answer_completed",
-            {"result": result, "replace_streamed_answer": False},
+            {"result": result, "replace_streamed_answer": replace_streamed_answer},
             request_id=request_id,
             sequence=seq,
         )

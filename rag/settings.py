@@ -67,6 +67,10 @@ class Settings:
     API_MAX_CONCURRENT_GENERATIONS: int = 4
     PIPELINE_VERSION: str = "dense-v1"
     INDEX_SCHEMA_VERSION: str = "v3"
+    VERIFIER_ENABLED: bool = True
+    VERIFIER_FAIL_CLOSED: bool = True
+    ANSWERABILITY_CALIBRATION_FILE: str | None = None
+    MAX_CORRECTION_ATTEMPTS: int = 1
 
     def __post_init__(self) -> None:
         # Normalize paths relative to BASE_DIR if not absolute
@@ -293,5 +297,13 @@ def get_settings(environ: Mapping[str, str] | None = None) -> Settings:
         kwargs["PIPELINE_VERSION"] = env["PIPELINE_VERSION"]
     if "INDEX_SCHEMA_VERSION" in env:
         kwargs["INDEX_SCHEMA_VERSION"] = env["INDEX_SCHEMA_VERSION"]
+    if "VERIFIER_ENABLED" in env:
+        kwargs["VERIFIER_ENABLED"] = _get_bool("VERIFIER_ENABLED", default=True)
+    if "VERIFIER_FAIL_CLOSED" in env:
+        kwargs["VERIFIER_FAIL_CLOSED"] = _get_bool("VERIFIER_FAIL_CLOSED", default=True)
+    if "ANSWERABILITY_CALIBRATION_FILE" in env:
+        kwargs["ANSWERABILITY_CALIBRATION_FILE"] = _get_str("ANSWERABILITY_CALIBRATION_FILE")
+    if "MAX_CORRECTION_ATTEMPTS" in env:
+        kwargs["MAX_CORRECTION_ATTEMPTS"] = int(env["MAX_CORRECTION_ATTEMPTS"])
 
     return Settings(**kwargs)  # type: ignore[arg-type]

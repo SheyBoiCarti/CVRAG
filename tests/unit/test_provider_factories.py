@@ -88,15 +88,21 @@ def test_live_factory_creates_chat_model_with_settings() -> None:
     assert chat_model.model == "meta/llama-3.3-70b-instruct"
 
 
-def test_live_factory_stubs_for_reranker_and_verifier() -> None:
-    """Verifies that create_reranker and create_support_verifier return stubs or None for Phase 1."""
+def test_live_factory_constructs_reranker_and_verifier() -> None:
+    """Verifies that create_reranker and create_support_verifier construct configured instances."""
+    from langchain_nvidia_ai_endpoints import NVIDIARerank
     from rag.provider_factories import LiveProviderFactories
+    from rag.verification.support import NvidiaSupportVerifier
 
     factory = LiveProviderFactories()
     settings = Settings(NVIDIA_API_KEY="nvapi-test")
 
-    assert factory.create_reranker(settings) is None
-    assert factory.create_support_verifier(settings) is None
+    reranker = factory.create_reranker(settings)
+    assert isinstance(reranker, NVIDIARerank)
+    assert reranker.model == settings.RERANK_MODEL
+
+    verifier = factory.create_support_verifier(settings)
+    assert isinstance(verifier, NvidiaSupportVerifier)
 
 
 def test_fake_embeddings_deterministic_and_dimensional() -> None:
