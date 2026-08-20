@@ -12,8 +12,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -73,3 +73,14 @@ desktop.ini
 documents/*
 !documents/.gitkeep
 !documents/Custom_CV.md
+
+# Frontend & Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/playwright-report/
+frontend/test-results/
+frontend/.turbo/
+*.tsbuildinfo
+
+

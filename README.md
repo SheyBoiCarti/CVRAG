@@ -96,7 +96,19 @@ Interactive OpenAPI documentation is available at:
 - Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
 - ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
-#### Option B: Run the Streamlit Frontend
+#### Option B: Run the Next.js Frontend (Production App Router)
+
+Start the Next.js frontend on port 3000:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser. The Next.js frontend communicates through a server-only proxy route (`/api/chat`) to the FastAPI backend with Server-Sent Events (SSE) streaming and verifiable evidence excerpts.
+
+#### Option C: Run the Streamlit Frontend (Legacy Parity)
 
 Start the interactive Streamlit chat interface on port 8501:
 
@@ -104,9 +116,11 @@ Start the interactive Streamlit chat interface on port 8501:
 streamlit run app.py
 ```
 
-#### Option C: Run Both Concurrently
+> **Note on Streamlit Coexistence**: Streamlit remains operational alongside the Next.js application to facilitate comparative acceptance and smoke testing.
 
-You can run both the FastAPI backend and Streamlit UI concurrently in separate terminals for full full-stack development.
+#### Option D: Run Full-Stack Concurrently
+
+Run the FastAPI backend on port 8000 and Next.js frontend on port 3000 concurrently in separate terminal sessions.
 
 ---
 
@@ -200,6 +214,13 @@ python -m pytest -q --basetemp=.pytest_tmp_eval
 
 # Validate package dependency consistency
 python -m pip check
+
+# Run frontend unit & component tests (Vitest + React Testing Library)
+cd frontend
+npm test
+
+# Run frontend browser end-to-end integration tests (Playwright)
+npm run test:e2e
 ```
 
 Run the live diagnostic script to verify vector indexing and embedding connectivity against your local documents:
