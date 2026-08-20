@@ -1,8 +1,9 @@
 import logging
-from pathlib import Path
 import re
 import threading
-from typing import Any, Iterator
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
@@ -12,8 +13,8 @@ from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from rag.config import Config
 from rag.document_loader import CVDocumentLoader
 from rag.errors import ProviderUnavailableError
-from rag.settings import Settings, get_settings
 from rag.retrieval.service import RetrievalService
+from rag.settings import Settings, get_settings
 from rag.vector_store import VectorStoreManager, is_transient_error, retry_transient
 
 LOGGER = logging.getLogger(__name__)

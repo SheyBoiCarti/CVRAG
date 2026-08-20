@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import random
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -182,8 +183,8 @@ def evaluate_calibration_pool_and_locked_set(
 
 __all__ = [
     "CalibrationOutcome",
-    "stratified_k_fold_split",
     "calibrate_answerability_threshold",
     "compute_bootstrap_ci",
     "evaluate_calibration_pool_and_locked_set",
+    "stratified_k_fold_split",
 ]

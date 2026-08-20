@@ -1,8 +1,8 @@
-from typing import Optional
+
 import streamlit as st
 
 
-def render_hero() -> Optional[str]:
+def render_hero() -> str | None:
     """Renders the hero introduction and clickable prompt chips when conversation is empty."""
     st.markdown(
         """

@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import re
-from typing import Sequence
 import unicodedata
+from collections.abc import Sequence
 
 from rank_bm25 import BM25Okapi
 
 from rag.retrieval.base import ChunkRecord, RankedChunk
-
 
 _TECHNICAL_TOKEN = re.compile(r"(?:\.[\w]+(?:[./+#_-][\w]+)*(?:[#+]+)?|[\w]+(?:[./+#_-][\w]+)*(?:[#+]+)?)", re.UNICODE)
 

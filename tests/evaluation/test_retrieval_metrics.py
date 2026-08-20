@@ -1,12 +1,12 @@
 import pytest
-from evaluation.schema import GoldenCase, EvidenceLocator
+
 from evaluation.metrics.retrieval import (
+    aggregate_retrieval_metrics,
     evaluate_retrieval,
     matches_locator,
     normalize_text,
-    aggregate_retrieval_metrics,
-    RetrievalCaseMetrics,
 )
+from evaluation.schema import EvidenceLocator, GoldenCase
 from rag.retrieval.base import ChunkRecord, RankedChunk
 
 

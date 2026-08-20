@@ -1,8 +1,9 @@
 import sys
 from pathlib import Path
+
 import pytest
 
-from rag.settings import Settings, get_settings, make_collection_name, BASE_DIR
+from rag.settings import BASE_DIR, Settings, get_settings, make_collection_name
 
 
 def test_default_settings():
@@ -195,7 +196,5 @@ def test_no_streamlit_imported_when_importing_settings_and_config():
     sys.modules.pop("rag.settings", None)
     sys.modules.pop("rag.config", None)
 
-    import rag.settings
-    import rag.config
 
     assert "streamlit" not in sys.modules

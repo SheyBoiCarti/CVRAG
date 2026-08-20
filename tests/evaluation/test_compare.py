@@ -1,7 +1,8 @@
 import json
-from pathlib import Path
+
 import pytest
-from evaluation.compare import compare_runs, ComparisonReport, load_artifact
+
+from evaluation.compare import ComparisonReport, compare_runs, load_artifact
 
 
 def test_compare_detects_improvements_and_regressions():

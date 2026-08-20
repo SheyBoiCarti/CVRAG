@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
-
-import pytest
 
 from evaluation.chunking_matrix import (
     CHUNKING_MATRIX_CONFIGS,

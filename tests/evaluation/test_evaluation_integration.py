@@ -1,11 +1,10 @@
 from pathlib import Path
-import json
-import pytest
+
 from evaluation.runner import EvaluationRunner, load_dataset
-from evaluation.schema import GoldenCase, RunArtifact
-from tests.fakes import FakeChatModel, FakeEmbeddings, FakeProviderFactories
+from evaluation.schema import RunArtifact
 from rag.pipeline import RAGPipeline
 from rag.settings import Settings
+from tests.fakes import FakeChatModel, FakeEmbeddings, FakeProviderFactories
 
 DATASET_PATH = Path(__file__).parents[2] / "evaluation" / "datasets" / "cv_golden.jsonl"
 

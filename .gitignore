@@ -62,8 +62,7 @@ htmlcov/
 # Local worktrees & Agent artifacts
 .worktrees/
 .superpowers/
-docs/
-
+docs/superpowers/
 # OS-generated files
 .DS_Store
 Thumbs.db

@@ -1,10 +1,11 @@
 import pytest
-from evaluation.schema import GoldenCase
+
 from evaluation.metrics.citations import (
-    evaluate_citations,
-    aggregate_citation_metrics,
     CitationCaseMetrics,
+    aggregate_citation_metrics,
+    evaluate_citations,
 )
+from evaluation.schema import GoldenCase
 from rag.models import AnswerResult, Citation, ClaimVerification
 from rag.retrieval.base import ChunkRecord, RankedChunk
 
@@ -75,7 +76,7 @@ def test_citation_metrics_with_invalid_citation_id():
 
 
 def test_aggregate_citation_metrics():
-    case = GoldenCase.from_dict({
+    GoldenCase.from_dict({
         "id": "c1", "category": "straightforward", "question": "q", "history": [], "answerable": True,
         "reference_answer": "ans", "required_facts": [], "forbidden_facts": [], "evidence_groups": [],
     })

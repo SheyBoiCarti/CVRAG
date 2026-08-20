@@ -91,6 +91,7 @@ def test_live_factory_creates_chat_model_with_settings() -> None:
 def test_live_factory_constructs_reranker_and_verifier() -> None:
     """Verifies that create_reranker and create_support_verifier construct configured instances."""
     from langchain_nvidia_ai_endpoints import NVIDIARerank
+
     from rag.provider_factories import LiveProviderFactories
     from rag.verification.support import NvidiaSupportVerifier
 

@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
-from typing import Sequence
+from dataclasses import dataclass
 
 from rag.retrieval.base import RankedChunk, Reranker, Retriever
 from rag.retrieval.rrf import reciprocal_rank_fusion
 from rag.settings import Settings
 from rag.vector_store import is_transient_error
-
 
 LOGGER = logging.getLogger(__name__)
 

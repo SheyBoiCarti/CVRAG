@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from rag.ingestion.snapshots import read_chunks_snapshot, validate_snapshot, write_chunks_snapshot
+from rag.ingestion.snapshots import (
+    read_chunks_snapshot,
+    validate_snapshot,
+    write_chunks_snapshot,
+)
 from rag.retrieval.base import ChunkRecord
 
 

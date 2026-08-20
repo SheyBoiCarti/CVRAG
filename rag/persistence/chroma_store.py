@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Sequence
 import warnings
+from collections.abc import Sequence
+from pathlib import Path
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document

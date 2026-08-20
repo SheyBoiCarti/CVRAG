@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-import pytest
+
 from evaluation.runner import EvaluationRunner, build_pipeline_from_preset, load_dataset
 from evaluation.schema import GoldenCase, RunArtifact, compute_content_hash
 from rag.pipeline import RAGPipeline

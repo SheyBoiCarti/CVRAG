@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import hashlib
 import json
-from typing import Any, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from dataclasses import asdict, dataclass
+from typing import Any
 
 
 def _canonical_json(value: Any) -> bytes:
@@ -46,7 +47,7 @@ class IndexManifest:
         return data
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "IndexManifest":
+    def from_dict(cls, data: Mapping[str, Any]) -> IndexManifest:
         return cls(
             schema_version=str(data["schema_version"]),
             index_id=str(data["index_id"]),
@@ -76,7 +77,7 @@ class ActiveIndexPointer:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ActiveIndexPointer":
+    def from_dict(cls, data: Mapping[str, Any]) -> ActiveIndexPointer:
         return cls(**{key: str(data[key]) for key in ("index_id", "collection_name", "manifest_sha256", "activated_at")})
 
 

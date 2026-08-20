@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import re
-from typing import Any, Mapping, Sequence
 import unicodedata
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any
 
 from evaluation.schema import FactSpec, GoldenCase
 from rag.models import AnswerResult
@@ -172,9 +173,9 @@ def aggregate_answer_metrics(
 
 
 __all__ = [
-    "normalize_answer_text",
-    "match_fact",
     "AnswerCaseMetrics",
-    "evaluate_answer",
     "aggregate_answer_metrics",
+    "evaluate_answer",
+    "match_fact",
+    "normalize_answer_text",
 ]

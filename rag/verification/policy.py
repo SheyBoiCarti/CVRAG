@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
-from rag.models import AnswerResult, Citation, Claim, ClaimVerification, Evidence
+from rag.models import AnswerResult, Evidence
 from rag.settings import Settings, get_settings
 from rag.verification.citation_parser import parse_claims
 from rag.verification.structural import (

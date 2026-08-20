@@ -1,6 +1,6 @@
+import pytest
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-import pytest
 
 from rag.vector_store import (
     RobustNVIDIAEmbeddings,

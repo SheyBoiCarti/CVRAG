@@ -1,11 +1,9 @@
-import pytest
-from evaluation.schema import GoldenCase, FactSpec
 from evaluation.metrics.answers import (
+    aggregate_answer_metrics,
     evaluate_answer,
     match_fact,
-    aggregate_answer_metrics,
-    AnswerCaseMetrics,
 )
+from evaluation.schema import FactSpec, GoldenCase
 from rag.models import AnswerResult
 
 

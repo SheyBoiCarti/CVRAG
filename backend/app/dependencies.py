@@ -8,7 +8,8 @@ from typing import cast
 from fastapi import HTTPException, Request, status
 
 from rag.pipeline import RAGPipeline
-from rag.settings import Settings, get_settings as load_default_settings
+from rag.settings import Settings
+from rag.settings import get_settings as load_default_settings
 
 
 def get_settings(request: Request) -> Settings:

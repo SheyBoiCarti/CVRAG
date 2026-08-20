@@ -4,15 +4,12 @@ import asyncio
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.exceptions import RequestValidationError
+import pytest
+from fastapi import APIRouter, Depends
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
-import pytest
 
-from backend.app.api.schemas.chat import ChatRequest, ChatResponse
 from backend.app.api.schemas.common import (
-    ErrorDetail,
     ErrorResponse,
     HealthLiveResponse,
     ReadinessResponse,

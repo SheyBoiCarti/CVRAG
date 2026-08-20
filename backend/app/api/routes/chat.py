@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from pathlib import Path
 import queue
 import threading
-from typing import Any, Sequence
 import uuid
+from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse

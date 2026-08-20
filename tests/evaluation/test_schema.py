@@ -1,15 +1,10 @@
-import json
 import pytest
+
 from evaluation.schema import (
     GoldenCase,
-    FactSpec,
-    EvidenceLocator,
-    EvaluationTrace,
     RunArtifact,
-    canonical_json_dumps,
     compute_content_hash,
 )
-from rag.models import AnswerResult, Citation
 from rag.retrieval.base import ChunkRecord, RankedChunk
 
 

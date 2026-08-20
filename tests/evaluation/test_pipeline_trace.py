@@ -1,4 +1,3 @@
-import pytest
 from evaluation.schema import EvaluationTrace
 from rag.models import AnswerResult, ChatTurn
 from rag.pipeline import RAGPipeline

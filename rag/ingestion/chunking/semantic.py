@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
+import numpy as np
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-import numpy as np
 
 from rag.ingestion.chunking.base import compute_chunk_id
 from rag.retrieval.base import ChunkRecord

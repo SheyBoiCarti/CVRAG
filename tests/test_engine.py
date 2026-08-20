@@ -1,8 +1,8 @@
+import pytest
 from langchain_core.documents import Document
 from langchain_core.runnables import RunnableLambda
-import pytest
 
-from rag.engine import CVChatEngine, NO_RESULTS_ANSWER
+from rag.engine import NO_RESULTS_ANSWER, CVChatEngine
 from rag.errors import ProviderUnavailableError
 
 

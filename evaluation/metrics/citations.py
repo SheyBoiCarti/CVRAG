@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from evaluation.schema import GoldenCase
 from rag.models import AnswerResult
@@ -139,6 +140,6 @@ def aggregate_citation_metrics(
 
 __all__ = [
     "CitationCaseMetrics",
-    "evaluate_citations",
     "aggregate_citation_metrics",
+    "evaluate_citations",
 ]

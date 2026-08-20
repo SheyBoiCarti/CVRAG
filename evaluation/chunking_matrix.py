@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import replace
-import json
 import logging
-from pathlib import Path
 import time
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping
+from dataclasses import replace
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -17,7 +17,7 @@ from evaluation.runner import EvaluationRunner, load_dataset
 from evaluation.schema import GoldenCase, canonical_json_dumps
 from rag.pipeline import RAGPipeline
 from rag.provider_factories import ProviderFactories
-from rag.settings import Settings, get_settings
+from rag.settings import Settings
 
 LOGGER = logging.getLogger(__name__)
 
@@ -79,8 +79,8 @@ class ChunkingMatrixRunner:
         LOGGER.info("Evaluating chunking configuration: %s", config_name)
         cfg_settings = replace(self.base_settings, **config_params)
 
-        from rag.provider_factories import LiveProviderFactories
         from rag.ingestion.indexer import IndexSynchronizer
+        from rag.provider_factories import LiveProviderFactories
 
         factories = self.provider_factories or LiveProviderFactories()
         embeddings = factories.create_embeddings(cfg_settings)

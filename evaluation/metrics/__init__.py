@@ -22,16 +22,16 @@ from evaluation.metrics.retrieval import (
 
 __all__ = [
     "AnswerCaseMetrics",
-    "aggregate_answer_metrics",
-    "evaluate_answer",
-    "match_fact",
-    "normalize_answer_text",
     "CitationCaseMetrics",
-    "aggregate_citation_metrics",
-    "evaluate_citations",
     "RetrievalCaseMetrics",
+    "aggregate_answer_metrics",
+    "aggregate_citation_metrics",
     "aggregate_retrieval_metrics",
+    "evaluate_answer",
+    "evaluate_citations",
     "evaluate_retrieval",
+    "match_fact",
     "matches_locator",
+    "normalize_answer_text",
     "normalize_text",
 ]

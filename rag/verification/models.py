@@ -5,10 +5,9 @@ These models are internal to the verification package and must not redefine publ
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
-
-from rag.models import Claim, ClaimImportance, ClaimVerificationStatus, Evidence
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -78,6 +77,6 @@ class CalibrationPolicyArtifact:
 
 
 __all__ = [
-    "SupportVerdict",
     "CalibrationPolicyArtifact",
+    "SupportVerdict",
 ]

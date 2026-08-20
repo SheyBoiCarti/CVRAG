@@ -25,5 +25,5 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module 'rag' has no attribute {name!r}")
 
 
-__all__ = ["Config", "CVDocumentLoader", "VectorStoreManager", "CVChatEngine"]
+__all__ = ["CVChatEngine", "CVDocumentLoader", "Config", "VectorStoreManager"]
 

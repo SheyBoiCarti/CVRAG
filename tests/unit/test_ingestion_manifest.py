@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from rag.ingestion.manifest import SourceFileEntry, compute_corpus_fingerprint, compute_index_fingerprint
+from rag.ingestion.manifest import (
+    SourceFileEntry,
+    compute_corpus_fingerprint,
+    compute_index_fingerprint,
+)
 
 
 def test_fingerprints_depend_on_normalized_source_identity_and_index_settings() -> None:

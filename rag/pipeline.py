@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Any, Callable, Iterator, Sequence
 import uuid
+from collections.abc import Callable, Iterator, Sequence
+from pathlib import Path
+from typing import Any
 
 from langchain_core.output_parsers import StrOutputParser
 
 from rag.document_loader import CVDocumentLoader
-from rag.engine import CORRECTION_PROMPT, CVChatEngine, NO_RESULTS_ANSWER
+from rag.engine import CORRECTION_PROMPT, NO_RESULTS_ANSWER, CVChatEngine
 from rag.errors import ProviderUnavailableError
 from rag.ingestion.indexer import IndexSynchronizer
 from rag.models import (
@@ -25,7 +26,7 @@ from rag.persistence.chroma_store import ChromaStoreAdapter
 from rag.provider_factories import LiveProviderFactories, ProviderFactories
 from rag.retrieval.bm25 import BM25Retriever
 from rag.retrieval.dense import DenseRetriever
-from rag.retrieval.reranker import NvidiaReranker, NoOpReranker
+from rag.retrieval.reranker import NoOpReranker, NvidiaReranker
 from rag.retrieval.service import RetrievalService
 from rag.settings import Settings, get_settings
 from rag.vector_store import VectorStoreManager, is_transient_error, retry_transient
@@ -73,7 +74,13 @@ class RAGPipeline:
 
     def _build_engine(self) -> CVChatEngine:
         """Constructs an engine instance wired to the configured settings and providers."""
-        factories = self.provider_factories or LiveProviderFactories()
+        factories = self.provider_factories
+        if factories is None:
+            if getattr(self.settings, "PROVIDER_MODE", "live") == "fake":
+                from rag.provider_factories import FakeProviderFactories
+                factories = FakeProviderFactories()
+            else:
+                factories = LiveProviderFactories()
         embeddings = factories.create_embeddings(self.settings)
         llm = factories.create_chat_model(self.settings)
         active_index = IndexSynchronizer(settings=self.settings, embeddings=embeddings).ensure_active_index()
@@ -121,7 +128,7 @@ class RAGPipeline:
         if self._support_verifier is None:
             if self.provider_factories is not None:
                 self._support_verifier = self.provider_factories.create_support_verifier(self.settings)
-            elif not self.settings.NVIDIA_API_KEY:
+            elif getattr(self.settings, "PROVIDER_MODE", "live") == "fake" or not self.settings.NVIDIA_API_KEY:
                 from rag.verification.support import FakeSupportVerifier
 
                 self._support_verifier = FakeSupportVerifier()
@@ -328,6 +335,13 @@ class RAGPipeline:
             question=sanitized_question,
             history_messages=prepared.history_messages,
         )
+        LOGGER.info(
+            "Pipeline answer completed stage=pipeline pipeline_version=%s decision=%s reason_codes=%s citation_count=%d",
+            self.settings.PIPELINE_VERSION,
+            result.decision,
+            list(result.reason_codes),
+            len(result.citations),
+        )
         return result
 
     def answer_with_trace(
@@ -337,9 +351,10 @@ class RAGPipeline:
         case_id: str = "",
     ) -> tuple[AnswerResult, Any]:
         """Answers question and captures structured diagnostic EvaluationTrace across pipeline stages."""
+        import time
+
         from evaluation.schema import EvaluationTrace
         from rag.retrieval.base import ChunkRecord, RankedChunk
-        import time
 
         start_total = time.perf_counter()
         sanitized_question = self.settings.validate_question(question)
@@ -687,6 +702,15 @@ class RAGPipeline:
             retrieval_query=prepared.retrieval_query,
             question=question,
             history_messages=prepared.history_messages,
+        )
+
+        LOGGER.info(
+            "Pipeline stream completed stage=pipeline request_id=%s pipeline_version=%s decision=%s reason_codes=%s citation_count=%d",
+            request_id,
+            self.settings.PIPELINE_VERSION,
+            result.decision,
+            list(result.reason_codes),
+            len(result.citations),
         )
 
         yield PipelineEvent.create(

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import pytest
-from rag.models import AnswerResult, Citation, Claim, Evidence, PipelineEvent
+from rag.models import AnswerResult
 from rag.pipeline import RAGPipeline
 from rag.settings import Settings
 from rag.verification.policy import STANDARD_ABSTENTION_TEXT
 from rag.verification.support import FakeSupportVerifier
-from tests.fakes import FakeChatModel, FakeEmbeddings, FakeProviderFactories
+from tests.fakes import FakeChatModel, FakeProviderFactories
 
 
 def test_verified_pipeline_synchronous_empty_retrieval(tmp_path):

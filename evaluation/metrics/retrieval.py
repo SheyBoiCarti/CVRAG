@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import math
 import re
-from types import MappingProxyType
-from typing import Any, Mapping, Sequence
 import unicodedata
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import Any
 
 from evaluation.schema import EvidenceLocator, GoldenCase
 from rag.retrieval.base import RankedChunk
@@ -185,9 +186,9 @@ def aggregate_retrieval_metrics(
 
 
 __all__ = [
-    "normalize_text",
-    "matches_locator",
     "RetrievalCaseMetrics",
-    "evaluate_retrieval",
     "aggregate_retrieval_metrics",
+    "evaluate_retrieval",
+    "matches_locator",
+    "normalize_text",
 ]

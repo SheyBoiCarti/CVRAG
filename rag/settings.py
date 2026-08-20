@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import hashlib
 import os
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -21,7 +22,7 @@ ALLOWED_CHUNK_STRATEGIES: set[str] = {
 def make_collection_name(schema_version: str, embedding_model: str) -> str:
     """Derives a deterministic Chroma collection name based on schema version and embedding model."""
     fingerprint = hashlib.sha256(
-        f"{schema_version}:{embedding_model}".encode("utf-8")
+        f"{schema_version}:{embedding_model}".encode()
     ).hexdigest()[:12]
     return f"cv_documents_{fingerprint}"
 
@@ -31,6 +32,7 @@ class Settings:
     """Environment-first, immutable runtime configuration model."""
 
     NVIDIA_API_KEY: str | None = None
+    PROVIDER_MODE: str = "live"
     LLM_MODEL: str = "meta/llama-3.3-70b-instruct"
     EMBEDDING_MODEL: str = "nvidia/nv-embedqa-e5-v5"
     DOCUMENTS_DIR: Path = field(default_factory=lambda: (BASE_DIR / "documents").resolve())
@@ -99,6 +101,10 @@ class Settings:
             if "*" in origin:
                 raise ValueError(f"Wildcard CORS origins are not allowed: '{origin}'")
         object.__setattr__(self, "API_CORS_ORIGINS", origins)
+
+        # Provider mode validation
+        if self.PROVIDER_MODE not in {"live", "fake"}:
+            raise ValueError(f"Invalid PROVIDER_MODE '{self.PROVIDER_MODE}'. Must be 'live' or 'fake'.")
 
         # Chunking strategy and parameter validation
         if self.CHUNK_STRATEGY not in ALLOWED_CHUNK_STRATEGIES:
@@ -235,6 +241,9 @@ def get_settings(environ: Mapping[str, str] | None = None) -> Settings:
     api_key = _get_str("NVIDIA_API_KEY")
     if api_key is not None:
         kwargs["NVIDIA_API_KEY"] = api_key
+
+    if "PROVIDER_MODE" in env:
+        kwargs["PROVIDER_MODE"] = env["PROVIDER_MODE"].strip().lower()
 
     if "LLM_MODEL" in env:
         kwargs["LLM_MODEL"] = env["LLM_MODEL"]

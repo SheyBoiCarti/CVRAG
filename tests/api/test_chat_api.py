@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 import threading
 import time
+from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi import Request
 from fastapi.testclient import TestClient
-import pytest
 
 from backend.app.api.schemas.chat import ChatResponse
 from backend.app.api.schemas.common import ErrorResponse
@@ -544,49 +544,48 @@ def test_chat_stream_success_events_and_headers(tmp_path: Path) -> None:
     mock_pipeline.stream.side_effect = mock_stream
     app = create_app(settings=settings, pipeline=mock_pipeline)
 
-    with TestClient(app) as client:
-        with client.stream(
-            "POST",
-            "/api/v1/chat/stream",
-            json={"question": "What is John's experience?"},
-        ) as response:
-            assert response.status_code == 200
-            assert "text/event-stream" in response.headers["content-type"]
-            assert response.headers.get("cache-control") == "no-cache"
-            assert response.headers.get("x-accel-buffering") == "no"
+    with TestClient(app) as client, client.stream(
+        "POST",
+        "/api/v1/chat/stream",
+        json={"question": "What is John's experience?"},
+    ) as response:
+        assert response.status_code == 200
+        assert "text/event-stream" in response.headers["content-type"]
+        assert response.headers.get("cache-control") == "no-cache"
+        assert response.headers.get("x-accel-buffering") == "no"
 
-            raw_body = response.read().decode("utf-8")
-            events = _parse_sse_events(raw_body)
+        raw_body = response.read().decode("utf-8")
+        events = _parse_sse_events(raw_body)
 
-            assert len(events) == 6
-            event_names = [e["event"] for e in events]
-            assert event_names == [
-                "retrieval_started",
-                "retrieval_completed",
-                "generation_started",
-                "answer_delta",
-                "answer_delta",
-                "answer_completed",
-            ]
+        assert len(events) == 6
+        event_names = [e["event"] for e in events]
+        assert event_names == [
+            "retrieval_started",
+            "retrieval_completed",
+            "generation_started",
+            "answer_delta",
+            "answer_delta",
+            "answer_completed",
+        ]
 
-            for i, ev in enumerate(events, 1):
-                assert ev["sequence"] == i
-                assert ev["schema_version"] == "1"
-                assert ev["request_id"] != ""
+        for i, ev in enumerate(events, 1):
+            assert ev["sequence"] == i
+            assert ev["schema_version"] == "1"
+            assert ev["request_id"] != ""
 
-            # Check deltas
-            deltas = [e["data"]["delta"] for e in events if e["event"] == "answer_delta"]
-            assert "".join(deltas) == "John Doe has 5 years of Python experience [S1]."
+        # Check deltas
+        deltas = [e["data"]["delta"] for e in events if e["event"] == "answer_delta"]
+        assert "".join(deltas) == "John Doe has 5 years of Python experience [S1]."
 
-            # Check terminal event
-            term = events[-1]
-            assert term["event"] == "answer_completed"
-            assert term["data"]["replace_streamed_answer"] is False
-            res = term["data"]["result"]
-            assert res["answer"] == "John Doe has 5 years of Python experience [S1]."
-            assert res["decision"] == "answered"
-            assert len(res["citations"]) == 1
-            assert res["citations"][0]["source"] == "john_doe_cv.pdf"
+        # Check terminal event
+        term = events[-1]
+        assert term["event"] == "answer_completed"
+        assert term["data"]["replace_streamed_answer"] is False
+        res = term["data"]["result"]
+        assert res["answer"] == "John Doe has 5 years of Python experience [S1]."
+        assert res["decision"] == "answered"
+        assert len(res["citations"]) == 1
+        assert res["citations"][0]["source"] == "john_doe_cv.pdf"
 
 
 def test_chat_stream_empty_retrieval_abstention(tmp_path: Path) -> None:
@@ -627,21 +626,20 @@ def test_chat_stream_empty_retrieval_abstention(tmp_path: Path) -> None:
     mock_pipeline.stream.side_effect = mock_stream
     app = create_app(settings=settings, pipeline=mock_pipeline)
 
-    with TestClient(app) as client:
-        with client.stream(
-            "POST",
-            "/api/v1/chat/stream",
-            json={"question": "What is obscure?"},
-        ) as response:
-            assert response.status_code == 200
-            events = _parse_sse_events(response.read().decode("utf-8"))
-            assert len(events) == 3
-            assert [e["event"] for e in events] == [
-                "retrieval_started",
-                "retrieval_completed",
-                "answer_completed",
-            ]
-            assert events[-1]["data"]["result"]["decision"] == "abstained"
+    with TestClient(app) as client, client.stream(
+        "POST",
+        "/api/v1/chat/stream",
+        json={"question": "What is obscure?"},
+    ) as response:
+        assert response.status_code == 200
+        events = _parse_sse_events(response.read().decode("utf-8"))
+        assert len(events) == 3
+        assert [e["event"] for e in events] == [
+            "retrieval_started",
+            "retrieval_completed",
+            "answer_completed",
+        ]
+        assert events[-1]["data"]["result"]["decision"] == "abstained"
 
 
 def test_chat_stream_preflight_oversized_payload_returns_413(tmp_path: Path) -> None:
@@ -860,19 +858,18 @@ def test_chat_stream_midstream_exception_emits_error_event(tmp_path: Path) -> No
     mock_pipeline.stream.side_effect = mock_stream_failing
     app = create_app(settings=settings, pipeline=mock_pipeline)
 
-    with TestClient(app) as client:
-        with client.stream(
-            "POST",
-            "/api/v1/chat/stream",
-            json={"question": "What is John's experience?"},
-        ) as response:
-            assert response.status_code == 200
-            events = _parse_sse_events(response.read().decode("utf-8"))
-            assert len(events) >= 2
-            terminal_event = events[-1]
-            assert terminal_event["event"] == "error"
-            assert terminal_event["data"]["code"] == "stream_interrupted"
-            assert terminal_event["data"]["retryable"] is False
+    with TestClient(app) as client, client.stream(
+        "POST",
+        "/api/v1/chat/stream",
+        json={"question": "What is John's experience?"},
+    ) as response:
+        assert response.status_code == 200
+        events = _parse_sse_events(response.read().decode("utf-8"))
+        assert len(events) >= 2
+        terminal_event = events[-1]
+        assert terminal_event["event"] == "error"
+        assert terminal_event["data"]["code"] == "stream_interrupted"
+        assert terminal_event["data"]["retryable"] is False
 
 
 def test_chat_stream_client_disconnect_releases_semaphore(tmp_path: Path) -> None:
@@ -961,22 +958,21 @@ def test_chat_stream_end_to_end_with_fake_providers(tmp_path: Path) -> None:
     pipeline = RAGPipeline(settings=settings, provider_factories=factories)
     app = create_app(settings=settings, pipeline=pipeline)
 
-    with TestClient(app) as client:
-        with client.stream(
-            "POST",
-            "/api/v1/chat/stream",
-            json={"question": "Who is Alice Smith?"},
-        ) as response:
-            assert response.status_code == 200
-            assert "text/event-stream" in response.headers["content-type"]
-            events = _parse_sse_events(response.read().decode("utf-8"))
-            assert len(events) >= 4
-            assert events[0]["event"] == "retrieval_started"
-            assert events[1]["event"] == "retrieval_completed"
-            assert events[2]["event"] == "generation_started"
-            assert events[-1]["event"] == "answer_completed"
-            assert "Alice Smith" in events[-1]["data"]["result"]["answer"]
-            assert events[-1]["data"]["result"]["citations"][0]["source"] == "sample_cv.txt"
+    with TestClient(app) as client, client.stream(
+        "POST",
+        "/api/v1/chat/stream",
+        json={"question": "Who is Alice Smith?"},
+    ) as response:
+        assert response.status_code == 200
+        assert "text/event-stream" in response.headers["content-type"]
+        events = _parse_sse_events(response.read().decode("utf-8"))
+        assert len(events) >= 4
+        assert events[0]["event"] == "retrieval_started"
+        assert events[1]["event"] == "retrieval_completed"
+        assert events[2]["event"] == "generation_started"
+        assert events[-1]["event"] == "answer_completed"
+        assert "Alice Smith" in events[-1]["data"]["result"]["answer"]
+        assert events[-1]["data"]["result"]["citations"][0]["source"] == "sample_cv.txt"
     app.state.pipeline = None
     del pipeline
     import gc

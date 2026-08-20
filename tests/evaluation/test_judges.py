@@ -1,10 +1,7 @@
-import json
-from pathlib import Path
-import pytest
-from evaluation.schema import GoldenCase
-from evaluation.judges.base import JudgeResult, JudgeCacheManager
+from evaluation.judges.base import JudgeCacheManager, JudgeResult
 from evaluation.judges.fake import FakeJudge
-from evaluation.judges.nvidia import NvidiaJudge, JUDGE_PROMPT_VERSION
+from evaluation.judges.nvidia import NvidiaJudge
+from evaluation.schema import GoldenCase
 
 
 def test_fake_judge_returns_deterministic_scores_offline():

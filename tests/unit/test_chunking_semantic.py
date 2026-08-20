@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Sequence
-import numpy as np
 import pytest
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings

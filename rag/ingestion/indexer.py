@@ -2,20 +2,30 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, datetime
 import json
 import os
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Sequence
 
 from langchain_core.embeddings import Embeddings
 
 from rag.ingestion.chunking.base import Chunker
 from rag.ingestion.chunking.factory import create_chunker
 from rag.ingestion.loader import CanonicalDocumentLoader
-from rag.ingestion.manifest import ActiveIndexPointer, IndexManifest, compute_corpus_fingerprint, compute_index_fingerprint, dump_json, manifest_sha256
-from rag.ingestion.snapshots import read_chunks_snapshot, validate_snapshot, write_chunks_snapshot
+from rag.ingestion.manifest import (
+    ActiveIndexPointer,
+    IndexManifest,
+    compute_corpus_fingerprint,
+    compute_index_fingerprint,
+    dump_json,
+    manifest_sha256,
+)
+from rag.ingestion.snapshots import (
+    read_chunks_snapshot,
+    validate_snapshot,
+    write_chunks_snapshot,
+)
 from rag.persistence.chroma_store import ChromaStoreAdapter
 from rag.retrieval.base import ChunkRecord
 from rag.settings import Settings

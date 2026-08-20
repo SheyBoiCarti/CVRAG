@@ -5,16 +5,23 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Callable, Mapping, Protocol, Sequence, runtime_checkable
+from collections.abc import Callable, Mapping, Sequence
+from typing import Protocol, runtime_checkable
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 
-from rag.models import Citation, Claim, ClaimVerification, Evidence, EvidenceSupportStatus
+from rag.models import (
+    Citation,
+    Claim,
+    ClaimVerification,
+    Evidence,
+    EvidenceSupportStatus,
+)
 from rag.settings import Settings, get_settings
-from rag.vector_store import is_transient_error, retry_transient
+from rag.vector_store import retry_transient
 from rag.verification.models import SupportVerdict
 
 LOGGER = logging.getLogger(__name__)
@@ -321,9 +328,9 @@ def verify_claims_support(
 
 
 __all__ = [
-    "SupportVerifier",
     "FakeSupportVerifier",
     "NvidiaSupportVerifier",
+    "SupportVerifier",
     "aggregate_citation_support_status",
     "verify_claims_support",
 ]

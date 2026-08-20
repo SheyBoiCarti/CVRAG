@@ -8,7 +8,6 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from rag.config import Config
 
-
 SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md"}
 EXCLUDED_FILENAMES = {"readme.md"}
 
@@ -109,7 +108,7 @@ class CVDocumentLoader:
             page = int(chunk.metadata.get("page", 0))
             # Generate deterministic hash for idempotent vector store indexing
             identity = (
-                f"{source}:{page}:{chunk_index}:{chunk.page_content}".encode("utf-8")
+                f"{source}:{page}:{chunk_index}:{chunk.page_content}".encode()
             )
             chunk.metadata = {
                 **chunk.metadata,

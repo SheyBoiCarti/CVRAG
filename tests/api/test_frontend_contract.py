@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 from backend.app.main import create_app
 from rag.settings import Settings
 

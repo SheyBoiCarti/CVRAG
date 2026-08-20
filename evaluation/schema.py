@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import hashlib
 import json
+from collections.abc import Mapping
+from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Literal
 
 from rag.models import AnswerResult
 from rag.retrieval.base import RankedChunk
@@ -332,14 +333,14 @@ class RunArtifact:
 
 
 __all__ = [
-    "CaseCategory",
     "ALLOWED_CATEGORIES",
-    "FactMatcher",
     "ALLOWED_FACT_MATCHERS",
-    "FactSpec",
-    "EvidenceLocator",
-    "GoldenCase",
+    "CaseCategory",
     "EvaluationTrace",
+    "EvidenceLocator",
+    "FactMatcher",
+    "FactSpec",
+    "GoldenCase",
     "RunArtifact",
     "canonical_json_dumps",
     "compute_content_hash",

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
 import logging
 import re
-from typing import Any, Sequence
+from collections.abc import Sequence
+from datetime import datetime, timezone
+from typing import Any
 
-from evaluation.judges.base import AnswerJudge, JudgeCacheManager, JudgeResult
+from evaluation.judges.base import JudgeCacheManager, JudgeResult
 from evaluation.schema import GoldenCase
 from rag.settings import Settings, get_settings
 

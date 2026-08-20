@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import pytest
 
 from evaluation.calibrate_abstention import calibrate_abstention_policy
 from evaluation.calibrate_answerability import calibrate_answerability_policy
@@ -42,8 +41,7 @@ def test_calibrate_abstention_policy(tmp_path: Path):
     dataset_file = tmp_path / "dataset.jsonl"
     cases = _sample_cases()
     with open(dataset_file, "w", encoding="utf-8") as f:
-        for c in cases:
-            f.write(json.dumps(c.to_dict()) + "\n")
+        f.writelines(json.dumps(c.to_dict()) + "\n" for c in cases)
 
     output_policy_file = tmp_path / "policy.json"
 
@@ -72,8 +70,7 @@ def test_calibrate_answerability_policy(tmp_path: Path):
     dataset_file = tmp_path / "dataset.jsonl"
     cases = _sample_cases()
     with open(dataset_file, "w", encoding="utf-8") as f:
-        for c in cases:
-            f.write(json.dumps(c.to_dict()) + "\n")
+        f.writelines(json.dumps(c.to_dict()) + "\n" for c in cases)
 
     output_policy_file = tmp_path / "policy_ans.json"
 

@@ -25,13 +25,13 @@ def render_header():
     with st.expander("How this CV RAG Assistant Works & Technical Models"):
         st.markdown(
             """
-        **1. Document Chunking**  
+        **1. Document Chunking**
         The candidate's CV document is split into semantic text chunks (`chunk_size=700`, `overlap=140`) to preserve context continuity.
 
-        **2. Embeddings & Vector Storage**  
+        **2. Embeddings & Vector Storage**
         Chunks are converted into dense vector embeddings using **NVIDIA QA & Text Embeddings** (`nvidia/nv-embedqa-e5-v5`) and indexed in a local **ChromaDB** vector database.
 
-        **3. Context Retrieval & LLM Generation**  
+        **3. Context Retrieval & LLM Generation**
         Top relevant CV snippets are retrieved via similarity search and passed to **Meta Llama 3.3 70B Instruct** (`meta/llama-3.3-70b-instruct`) to generate factually grounded responses.
 
         <div class="disclaimer-banner">

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from rag.models import AnswerabilityDecision, AnswerabilitySignals
+from rag.models import AnswerabilitySignals
 from rag.retrieval.base import ChunkRecord, RankedChunk
 from rag.retrieval.service import RetrievalResult
 from rag.verification.answerability import (

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Mapping, Protocol, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any, Protocol
 
 from langchain_core.documents import Document
 
@@ -26,7 +27,7 @@ def compute_chunk_id(
 ) -> str:
     """Computes deterministic SHA-256 chunk identity from all identity fields."""
     canonical_params = _canonical_json(dict(parameters)).decode("utf-8")
-    identity = f"{source}:{page}:{strategy}:{canonical_params}:{chunk_index}:{content}".encode("utf-8")
+    identity = f"{source}:{page}:{strategy}:{canonical_params}:{chunk_index}:{content}".encode()
     return hashlib.sha256(identity).hexdigest()
 
 

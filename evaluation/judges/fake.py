@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
-from typing import Any, Sequence
+from typing import Any
 
-from evaluation.judges.base import AnswerJudge, JudgeResult
+from evaluation.judges.base import JudgeResult
 from evaluation.schema import GoldenCase
 
 

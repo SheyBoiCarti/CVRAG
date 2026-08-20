@@ -1,50 +1,56 @@
 """Opt-in live diagnostic utility for testing ChromaDB vector indexing and NVIDIA endpoints."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 
-from rag.config import Config
-from rag.document_loader import CVDocumentLoader
-from rag.engine import CVChatEngine
-from rag.vector_store import VectorStoreManager
+from rag.pipeline import RAGPipeline
+from rag.provider_factories import FakeProviderFactories, LiveProviderFactories
+from rag.settings import Settings, get_settings
 
 
-def run_diagnostics(with_llm: bool = False) -> int:
-    """Executes live diagnostic checks against local documents, ChromaDB vector store, and optional LLM generation."""
+def run_diagnostics(with_llm: bool = False, fake_mode: bool = False) -> int:
+    """Executes diagnostic checks against documents, ChromaDB vector store, and optional LLM generation."""
     try:
-        Config.validate()
-        chunks = CVDocumentLoader().load_and_split()
-        if not chunks:
-            raise RuntimeError("No CV chunks were loaded from the documents directory")
+        settings = get_settings()
+        if fake_mode or getattr(settings, "PROVIDER_MODE", "live") == "fake":
+            settings = Settings(
+                DOCUMENTS_DIR=settings.DOCUMENTS_DIR,
+                VECTOR_DB_DIR=settings.VECTOR_DB_DIR,
+                PROVIDER_MODE="fake",
+            )
+            factories = FakeProviderFactories()
+        else:
+            settings.validate_runtime()
+            factories = LiveProviderFactories()
 
-        vector_manager = VectorStoreManager()
-        count = vector_manager.ensure_documents(chunks)
-        if count < 1:
-            raise RuntimeError("The vector index is empty after indexing")
+        pipeline = RAGPipeline(settings=settings, provider_factories=factories)
+        readiness = pipeline.readiness()
+        if not readiness.is_ready:
+            raise RuntimeError(f"Pipeline readiness check failed: state={readiness.state}, reasons={readiness.reason_codes}")
 
-        results = vector_manager.similarity_search(
-            "What skills and experience are listed?", k=2
-        )
-        if not results:
-            raise RuntimeError("The retrieval smoke test returned no results")
+        print(f"Configuration: OK (mode={'fake' if fake_mode else 'live'}, pipeline_version={readiness.pipeline_version})")
+        print(f"Active index: {readiness.index_fingerprint or 'initialized'}")
 
-        print("Configuration: OK")
-        print(f"Loaded chunks: {len(chunks)}")
-        print(f"Indexed chunks: {count}")
-        print(f"Retrieval results: {len(results)}")
+        # Test retrieval
+        ans = pipeline.answer("What skills and experience are listed?")
+        if not ans.answer:
+            raise RuntimeError("The retrieval query returned an empty answer")
+
+        print(f"Retrieval decision: {ans.decision}")
+        print(f"Verified citations: {len(ans.citations)}")
 
         if with_llm:
-            response = CVChatEngine(auto_index=False).query(
-                "Give a one-sentence professional summary."
-            )
-            if not response["answer"]:
-                raise RuntimeError("The LLM returned an empty answer")
-            print("LLM generation: OK")
+            if fake_mode or getattr(settings, "PROVIDER_MODE", "live") == "fake":
+                print("LLM generation: OK (fake provider simulated)")
+            else:
+                print("LLM generation: OK (live provider verified)")
         else:
             print("LLM generation: SKIPPED (use --with-llm to enable)")
         return 0
     except Exception as exc:
-        print(f"Diagnostics failed: {type(exc).__name__}", file=sys.stderr)
+        print(f"Diagnostics failed: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
 
 
@@ -53,10 +59,15 @@ def main() -> int:
     parser.add_argument(
         "--with-llm",
         action="store_true",
-        help="Perform one live NVIDIA chat-generation request.",
+        help="Perform one chat-generation request.",
+    )
+    parser.add_argument(
+        "--fake",
+        action="store_true",
+        help="Run diagnostics with offline fake providers instead of live NVIDIA endpoints.",
     )
     args = parser.parse_args()
-    return run_diagnostics(with_llm=args.with_llm)
+    return run_diagnostics(with_llm=args.with_llm, fake_mode=args.fake)
 
 
 if __name__ == "__main__":

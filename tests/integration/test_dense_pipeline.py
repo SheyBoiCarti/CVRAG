@@ -1,14 +1,13 @@
-from pathlib import Path
-from typing import Sequence
+from collections.abc import Sequence
 
-from langchain_core.documents import Document
 import pytest
+from langchain_core.documents import Document
 
 from rag.engine import CVChatEngine
 from rag.models import AnswerResult, ChatTurn, Citation, PipelineEvent, ReadinessResult
 from rag.pipeline import RAGPipeline
 from rag.settings import Settings
-from tests.fakes import FakeChatModel, FakeEmbeddings, FakeProviderFactories
+from tests.fakes import FakeChatModel, FakeProviderFactories
 
 
 class StubVectorManager:
@@ -159,7 +158,7 @@ def test_stream_empty_retrieval_emits_terminal_answer_without_generation():
     class FailIfInvokedChatModel(FakeChatModel):
         def _stream(self, messages, **kwargs):
             raise AssertionError("LLM stream should not be invoked for empty retrieval")
-            yield  # noqa
+            yield
 
     engine = CVChatEngine(
         auto_index=False,

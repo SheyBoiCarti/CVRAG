@@ -4,15 +4,10 @@ from __future__ import annotations
 
 import argparse
 import logging
-from pathlib import Path
-from typing import Any, Callable
 
 from evaluation.calibrate_abstention import (
-    _compute_dataset_hash,
     calibrate_abstention_policy,
 )
-from evaluation.schema import GoldenCase
-from rag.verification.models import CalibrationPolicyArtifact
 
 LOGGER = logging.getLogger(__name__)
 

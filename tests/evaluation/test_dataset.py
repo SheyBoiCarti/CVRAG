@@ -1,6 +1,8 @@
-from pathlib import Path
 import json
+from pathlib import Path
+
 import pytest
+
 from evaluation.schema import GoldenCase
 
 DATASET_PATH = Path(__file__).parents[2] / "evaluation" / "datasets" / "cv_golden.jsonl"

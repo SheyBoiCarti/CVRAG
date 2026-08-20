@@ -6,11 +6,8 @@ import argparse
 import hashlib
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Sequence
-import uuid
-
-import numpy as np
 
 from evaluation.calibration import (
     calibrate_answerability_threshold,

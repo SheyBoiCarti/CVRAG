@@ -40,67 +40,63 @@ The RAG engine initializes on startup, builds or connects to the local ChromaDB 
 
 ## Quick Start & Local Setup
 
-### 1. Clone & Environment Setup
+### Runtime Requirements
+- **Python**: 3.12 (standardized across Docker, devcontainer, CI, and local development)
+- **Node.js**: 24 LTS (or 22+) & npm
+- **Docker Engine & Docker Compose**: 24+ (optional for containerized deployment)
 
-Use Python 3.12 (or 3.10+) to create a virtual environment:
+---
 
-```powershell
+### Option 1: Docker Compose (Recommended)
+
+Start the complete full-stack system (FastAPI backend + Next.js frontend + persistent Chroma volume):
+
+```bash
+# Offline mode with simulated fake AI providers (zero credentials required)
+PROVIDER_MODE=fake docker compose up -d --build
+
+# Or live mode with NVIDIA NIM credentials
+cp .env.example .env
+# Set NVIDIA_API_KEY=nvapi-... in .env
+docker compose up -d --build
+```
+
+Wait for backend readiness and open the app:
+```bash
+python scripts/wait-for-ready.py
+open http://localhost:3000
+```
+
+---
+
+### Option 2: Running Directly on Host
+
+#### 1. Backend Setup (Python 3.12)
+
+```bash
 # Create and activate virtual environment
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+python3 -m venv .venv
+source .venv/bin/activate  # Or on Windows: .\.venv\Scripts\Activate.ps1
 
 # Upgrade pip and install dependencies
 python -m pip install --upgrade pip
 python -m pip install -r requirements-dev.txt
-```
 
-### 2. Configure Environment Variables
+# Configure environment
+cp .env.example .env
+# Edit .env and set NVIDIA_API_KEY (or set PROVIDER_MODE=fake for offline work)
 
-Copy the example environment template:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Open `.env` and add your [NVIDIA NIM / AI Foundation API Key](https://build.nvidia.com/):
-
-```ini
-NVIDIA_API_KEY=your_nvidia_api_key_here
-```
-
-### 3. Add Your Documents
-
-Place any number of CVs, thesis documents, project case studies, or notes into the `documents/` directory:
-
-```text
-documents/
-  ├── resume.pdf
-  ├── thesis_paper.pdf
-  ├── project_case_study.md
-  └── system_architecture.txt
-```
-
-> **Privacy Note**: Files placed in `documents/` (except `.gitkeep`) are automatically excluded from version control by `.gitignore` to keep personal documents and contact details private when pushing to public repositories.
-
-### 4. Run the Application
-
-#### Option A: Run the FastAPI Backend
-
-Start the FastAPI HTTP & SSE service on port 8000:
-
-```powershell
-uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+# Run FastAPI backend
+uvicorn backend.app.main:create_app --factory --host 0.0.0.0 --port 8000 --reload
 ```
 
 Interactive OpenAPI documentation is available at:
 - Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
 - ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
-#### Option B: Run the Next.js Frontend (Production App Router)
+#### 2. Frontend Setup (Node.js 24 LTS)
 
-Start the Next.js frontend on port 3000:
-
-```powershell
+```bash
 cd frontend
 npm install
 npm run dev
@@ -108,19 +104,13 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser. The Next.js frontend communicates through a server-only proxy route (`/api/chat`) to the FastAPI backend with Server-Sent Events (SSE) streaming and verifiable evidence excerpts.
 
-#### Option C: Run the Streamlit Frontend (Legacy Parity)
+#### 3. Legacy Streamlit Interface (Optional)
 
-Start the interactive Streamlit chat interface on port 8501:
-
-```powershell
+```bash
 streamlit run app.py
 ```
 
-> **Note on Streamlit Coexistence**: Streamlit remains operational alongside the Next.js application to facilitate comparative acceptance and smoke testing.
-
-#### Option D: Run Full-Stack Concurrently
-
-Run the FastAPI backend on port 8000 and Next.js frontend on port 3000 concurrently in separate terminal sessions.
+> **Deployment Guide**: See [docs/deployment.md](docs/deployment.md) for full container architecture, production single-instance persistence, Vercel frontend deployment, and security guardrails.
 
 ---
 

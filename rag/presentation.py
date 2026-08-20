@@ -9,7 +9,6 @@ from langchain_core.documents import Document
 from rag.errors import ProviderUnavailableError
 from rag.models import Citation
 
-
 PROVIDER_UNAVAILABLE_MESSAGE = (
     "The AI provider is temporarily unavailable. Please try again shortly."
 )

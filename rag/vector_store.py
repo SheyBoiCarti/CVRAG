@@ -14,7 +14,6 @@ from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
 
 from rag.config import Config
 
-
 LOGGER = logging.getLogger(__name__)
 STATUS_PATTERN = re.compile(r"\[(\d{3})\]")
 BEARER_PATTERN = re.compile(r"(?i)(bearer\s+)[^\s,;]+")

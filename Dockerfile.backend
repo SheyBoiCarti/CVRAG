@@ -1,0 +1,46 @@
+FROM python:3.12-slim-bookworm AS base
+
+# Prevent Python from buffering stdout/stderr and writing bytecode
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DOCUMENTS_DIR=/app/documents \
+    VECTOR_DB_DIR=/data/vector_db \
+    PORT=8000
+
+# Install build dependencies, build packages, then clean up apt cache
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user (UID/GID 10001:10001) and application/data directories
+RUN groupadd -g 10001 appgroup && \
+    useradd -u 10001 -g appgroup -s /bin/bash -m appuser && \
+    mkdir -p /app /app/documents /data/vector_db && \
+    chown -R 10001:10001 /app /data/vector_db
+
+WORKDIR /app
+
+# Install pinned Python dependencies
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application source code
+COPY backend /app/backend
+COPY rag /app/rag
+COPY documents/Custom_CV.md /app/documents/Custom_CV.md
+
+# Ensure all application files are owned by the non-root user
+RUN chown -R 10001:10001 /app
+
+# Switch to non-root user identity
+USER 10001:10001
+
+EXPOSE 8000
+
+# Container liveness probe using Python standard library urllib (no curl dependency)
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/live')"
+
+# Start single Uvicorn worker instance by default
+CMD ["uvicorn", "backend.app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

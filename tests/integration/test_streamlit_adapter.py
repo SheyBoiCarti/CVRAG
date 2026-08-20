@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import MagicMock
-from langchain_core.documents import Document
-import pytest
+
 import streamlit as st
+from langchain_core.documents import Document
 
 from rag.models import Citation
-from rag.presentation import citation_view, query_error_message
+from rag.presentation import citation_view
 from rag.runtime import get_pipeline, load_streamlit_secrets_into_environ
 
 

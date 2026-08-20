@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
 import logging
-from typing import AsyncIterator
+import time
+import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -16,7 +18,7 @@ from backend.app.api.routes import chat, health
 from backend.app.api.schemas.common import ErrorDetail, ErrorResponse
 from rag.errors import ProviderUnavailableError, RAGError
 from rag.pipeline import RAGPipeline
-from rag.provider_factories import ProviderFactories
+from rag.provider_factories import FakeProviderFactories, ProviderFactories
 from rag.settings import Settings, get_settings
 
 LOGGER = logging.getLogger(__name__)
@@ -69,7 +71,11 @@ def create_app(
                 app.state.index_fingerprint = None
         else:
             try:
-                if provider_factories is None and not resolved_settings.NVIDIA_API_KEY:
+                factories = provider_factories
+                if factories is None and getattr(resolved_settings, "PROVIDER_MODE", "live") == "fake":
+                    factories = FakeProviderFactories()
+
+                if factories is None and not resolved_settings.NVIDIA_API_KEY:
                     LOGGER.info(
                         "NVIDIA_API_KEY is not configured; starting in degraded not_ready state."
                     )
@@ -81,7 +87,7 @@ def create_app(
                 else:
                     instantiated_pipeline = RAGPipeline(
                         settings=resolved_settings,
-                        provider_factories=provider_factories,
+                        provider_factories=factories,
                     )
                     app.state.pipeline = instantiated_pipeline
                     readiness = instantiated_pipeline.readiness()
@@ -113,6 +119,30 @@ def create_app(
     app.state.readiness_reason_codes = []
     app.state.pipeline_version = resolved_settings.PIPELINE_VERSION
     app.state.index_fingerprint = None
+
+    # Correlation ID middleware
+    @app.middleware("http")
+    async def correlation_id_middleware(request: Request, call_next):
+        correlation_id = (
+            request.headers.get("x-correlation-id")
+            or request.headers.get("x-request-id")
+            or uuid.uuid4().hex
+        )
+        request.state.correlation_id = correlation_id
+        start_time = time.perf_counter()
+        response = await call_next(request)
+        duration_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
+        response.headers["X-Correlation-ID"] = correlation_id
+        response.headers["X-Request-ID"] = correlation_id
+        LOGGER.info(
+            "HTTP %s %s completed status=%s duration_ms=%s correlation_id=%s",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+            correlation_id,
+        )
+        return response
 
     # CORS configuration
     if resolved_settings.API_CORS_ORIGINS:

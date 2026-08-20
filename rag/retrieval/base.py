@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Protocol
 
 
 def _immutable_mapping(values: Mapping[str, Any] | None) -> Mapping[str, Any]:
@@ -76,4 +77,4 @@ class Reranker(Protocol):
     ) -> list[RankedChunk]: ...
 
 
-__all__ = ["ChunkRecord", "RankedChunk", "Retriever", "Reranker"]
+__all__ = ["ChunkRecord", "RankedChunk", "Reranker", "Retriever"]

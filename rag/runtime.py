@@ -3,11 +3,12 @@ from __future__ import annotations
 import dataclasses
 import os
 from typing import Any
+
 import streamlit as st
 
 from rag.engine import CVChatEngine
 from rag.pipeline import RAGPipeline
-from rag.settings import Settings, get_settings
+from rag.settings import get_settings
 
 
 def load_streamlit_secrets_into_environ() -> None:
@@ -56,7 +57,7 @@ def get_engine(
 
 
 __all__ = [
-    "load_streamlit_secrets_into_environ",
-    "get_pipeline",
     "get_engine",
+    "get_pipeline",
+    "load_streamlit_secrets_into_environ",
 ]

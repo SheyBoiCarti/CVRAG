@@ -17,17 +17,24 @@
       ]
     }
   },
-  "updateContentCommand": "[ -f packages.txt ] && sudo apt update && sudo apt upgrade -y && sudo xargs apt install -y <packages.txt; [ -f requirements.txt ] && pip3 install --user -r requirements.txt; pip3 install --user streamlit; echo '✅ Packages installed and Requirements met'",
-  "postAttachCommand": {
-    "server": "streamlit run app.py --server.enableCORS false --server.enableXsrfProtection false"
-  },
+  "updateContentCommand": "pip3 install --user -r requirements-dev.txt; (cd frontend && npm install); echo '✅ Packages installed and Requirements met'",
   "portsAttributes": {
-    "8501": {
-      "label": "Application",
+    "3000": {
+      "label": "Next.js Frontend",
       "onAutoForward": "openPreview"
+    },
+    "8000": {
+      "label": "FastAPI Backend",
+      "onAutoForward": "silent"
+    },
+    "8501": {
+      "label": "Streamlit (Legacy)",
+      "onAutoForward": "silent"
     }
   },
   "forwardPorts": [
+    3000,
+    8000,
     8501
   ]
 }

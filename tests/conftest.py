@@ -1,10 +1,10 @@
 import gc
 import os
-from pathlib import Path
 import socket
+from pathlib import Path
 
-from chromadb.api.client import SharedSystemClient
 import pytest
+from chromadb.api.client import SharedSystemClient
 
 
 def pytest_configure(config):

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-from rag.models import Claim
 from rag.verification.citation_parser import parse_claims
 
 

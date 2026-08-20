@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import Sequence
 
 from rag.models import Claim
-
 
 _CITATION_TAG_PATTERN = re.compile(
     r"\[\s*(?:S\d+(?:\s*,\s*S\d+)*)\s*\]",

@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import pytest
 from rag.models import Citation, Claim, ClaimVerification, Evidence
-from rag.verification.models import SupportVerdict
 from rag.verification.support import (
     FakeSupportVerifier,
-    aggregate_citation_support_status,
     verify_claims_support,
 )
 

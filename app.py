@@ -1,13 +1,12 @@
 import logging
-import os
-from pathlib import Path
 import sys
+from pathlib import Path
+
 import streamlit as st
 
 # Ensure repository root is on sys.path for direct 'streamlit run app.py' invocation
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from rag.engine import NO_RESULTS_ANSWER
 from rag.pipeline import RAGPipeline
 from rag.presentation import query_error_message
 from rag.runtime import get_pipeline, load_streamlit_secrets_into_environ

@@ -1,0 +1,44 @@
+# Version control & tooling
+.git
+.github
+.devcontainer
+.vscode
+.idea
+
+# Virtual environments & caches
+.venv
+venv
+env
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache
+.pytest_tmp*
+.coverage
+.coverage.*
+htmlcov
+
+# Environment variables & secrets
+.env
+.env.*
+
+# Dynamic storage & database artifacts
+vector_db/
+chroma_test_db/
+
+# Documentation & agent artifacts
+docs/
+.superpowers/
+.worktrees/
+
+# Frontend (built in separate Dockerfile)
+frontend/
+
+# Local/private documents (mount via volume or copy tracked corpus explicitly)
+documents/*
+!documents/Custom_CV.md
+!documents/.gitkeep
+
+# Evaluation artifacts
+evaluation/baselines/

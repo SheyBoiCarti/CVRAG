@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from rag.models import Citation, Claim, ClaimVerification, Evidence
 
@@ -112,7 +112,7 @@ def build_initial_citations(
 
 
 __all__ = [
-    "verify_structural",
-    "filter_cited_evidence",
     "build_initial_citations",
+    "filter_cited_evidence",
+    "verify_structural",
 ]
