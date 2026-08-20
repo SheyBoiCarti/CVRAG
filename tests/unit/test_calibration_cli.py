@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from evaluation.calibrate_abstention import calibrate_abstention_policy
+from evaluation.calibrate_answerability import calibrate_answerability_policy
 from evaluation.schema import GoldenCase
 from rag.verification.answerability import load_calibration_policy
 from rag.verification.models import CalibrationPolicyArtifact
@@ -65,3 +66,27 @@ def test_calibrate_abstention_policy(tmp_path: Path):
     assert loaded is not None
     assert loaded.policy_version == artifact.policy_version
     assert loaded.threshold == artifact.threshold
+
+
+def test_calibrate_answerability_policy(tmp_path: Path):
+    dataset_file = tmp_path / "dataset.jsonl"
+    cases = _sample_cases()
+    with open(dataset_file, "w", encoding="utf-8") as f:
+        for c in cases:
+            f.write(json.dumps(c.to_dict()) + "\n")
+
+    output_policy_file = tmp_path / "policy_ans.json"
+
+    artifact = calibrate_answerability_policy(
+        dataset_path=dataset_file,
+        signal_name="top_reranker_score",
+        output_path=output_policy_file,
+        score_extractor=lambda c: float(c.tags[0].split("_")[1]),
+        seed=42,
+    )
+
+    assert isinstance(artifact, CalibrationPolicyArtifact)
+    assert artifact.signal_name == "top_reranker_score"
+    assert 0.3 <= artifact.threshold <= 0.8
+    assert output_policy_file.exists()
+
