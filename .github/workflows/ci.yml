@@ -134,9 +134,9 @@ jobs:
         run: |
           python scripts/wait-for-ready.py --url http://localhost:8000/api/v1/health/ready --timeout 60
 
-      - name: Verify frontend responds to HTTP request
+      - name: Wait for frontend HTTP readiness
         run: |
-          curl -sSf http://localhost:3000/ > /dev/null
+          python scripts/wait-for-ready.py --url http://localhost:3000/ --timeout 60
 
       - name: Execute end-to-end chat query through frontend proxy
         run: |
