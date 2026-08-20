@@ -1,0 +1,77 @@
+.container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.85rem;
+  background-color: var(--user-bubble);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  font-size: 0.825rem;
+  color: var(--text-muted);
+  width: fit-content;
+  margin: 0.5rem 0;
+}
+
+.stagesList {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stageBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-light);
+  color: var(--text-muted);
+}
+
+.stageBadge.active {
+  color: var(--text-main);
+  border-color: var(--accent-blue);
+  background-color: var(--accent-blue-subtle);
+}
+
+.stageBadge.completed {
+  color: var(--badge-supported);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--accent-blue);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.pulseDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--accent-blue);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
