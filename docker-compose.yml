@@ -1,0 +1,52 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: cvrag-backend:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      - PROVIDER_MODE=${PROVIDER_MODE:-live}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nvidia/nv-embedqa-e5-v5}
+      - LLM_MODEL=${LLM_MODEL:-meta/llama-3.3-70b-instruct}
+      - DOCUMENTS_DIR=/app/documents
+      - VECTOR_DB_DIR=/data/vector_db
+      - CHUNK_STRATEGY=${CHUNK_STRATEGY:-recursive_bullet_v1}
+      - RETRIEVAL_MODE=${RETRIEVAL_MODE:-dense}
+      - RERANK_ENABLED=${RERANK_ENABLED:-false}
+      - API_CORS_ORIGINS=${API_CORS_ORIGINS:-http://localhost:3000}
+    volumes:
+      - ./documents:/app/documents:ro
+      - vector_data:/data/vector_db
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/live')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: cvrag-frontend:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (res) => process.exit(res.statusCode < 400 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+    restart: unless-stopped
+
+volumes:
+  vector_data:

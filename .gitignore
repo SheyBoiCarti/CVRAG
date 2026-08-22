@@ -1,0 +1,86 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+/lib/
+/lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+ENV*/
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# Vector DB & dynamic Chroma storage
+vector_db/
+chroma_test_db/
+
+# IDE, Editor & Tooling
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# Testing & Coverage
+.pytest_cache/
+.pytest_tmp*/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local worktrees & Agent artifacts
+.worktrees/
+.superpowers/
+docs/superpowers/
+# OS-generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# User documents & custom CV files (keep local, never commit)
+documents/*
+!documents/.gitkeep
+!documents/*.example
+!documents/README.md
+!documents/sample_cv.md
+
+# Frontend & Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/playwright-report/
+frontend/test-results/
+frontend/.turbo/
+*.tsbuildinfo
+
+

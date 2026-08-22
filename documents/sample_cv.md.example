@@ -1,0 +1,39 @@
+# Jane Doe
+**Senior Software Engineer & AI Systems Architect**
+*Email: jane.doe@example.com | GitHub: github.com/janedoe | Location: San Francisco, CA*
+
+---
+
+## Professional Summary
+Experienced Software Engineer specializing in backend architectures, distributed systems, and Retrieval-Augmented Generation (RAG) pipelines. Proven track record of designing scalable cloud microservices, fine-tuning large language models, and deploying production vector search applications.
+
+---
+
+## Technical Skills
+- **Languages**: Python (FastAPI, PyTorch), TypeScript/JavaScript (Next.js, Node.js), Go, SQL
+- **AI & ML**: LangChain, LlamaIndex, NVIDIA NIM, OpenAI APIs, ChromaDB, FAISS, Sentence-Transformers
+- **Cloud & DevOps**: Docker, Kubernetes, AWS (ECS, S3, RDS), GitHub Actions, Terraform
+- **Databases**: PostgreSQL, Redis, ChromaDB, MongoDB
+
+---
+
+## Professional Experience
+
+### Senior Software Engineer // Tech Innovations Inc.
+*01/2023 – Present*
+- Architected and deployed an enterprise RAG knowledge base indexing 50,000+ technical documents using FastAPI, LangChain, and ChromaDB.
+- Implemented hybrid search with Reciprocal Rank Fusion (RRF) and cross-encoder reranking, improving retrieval precision by 28%.
+- Optimized streaming latency with Server-Sent Events (SSE) and asynchronous token batching.
+
+### Software Engineer // CloudScale Solutions
+*06/2021 – 12/2022*
+- Designed high-throughput REST APIs and microservices handling 10M+ daily requests using Python and PostgreSQL.
+- Built automated CI/CD pipelines reducing deployment failure rate by 40%.
+
+---
+
+## Education
+
+### Bachelor of Science in Computer Science
+*State University (2017 – 2021) — Graduated with First Class Honours*
+- Relevant Coursework: Data Structures & Algorithms, Distributed Systems, Machine Learning, Operating Systems.

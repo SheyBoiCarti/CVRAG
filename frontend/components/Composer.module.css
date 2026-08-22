@@ -1,0 +1,112 @@
+.composerContainer {
+  position: sticky;
+  bottom: 0;
+  background-color: var(--bg-canvas);
+  border-top: 1px solid var(--border-light);
+  padding: 1rem 0 1.5rem;
+  width: 100%;
+  z-index: 50;
+}
+
+.composerBox {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.composerBox:focus-within {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+.composerBox.hasError {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
+}
+
+.inputRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  resize: none;
+  min-height: 48px;
+  max-height: 160px;
+  outline: none;
+  padding: 0.25rem 0;
+}
+
+.textarea::placeholder {
+  color: #94a3b8;
+  opacity: 0.8;
+}
+
+.textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sendButton {
+  background-color: var(--accent-blue);
+  color: #ffffff;
+  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  transition: all 0.15s ease-in-out;
+  flex-shrink: 0;
+}
+
+.sendButton:hover:not(:disabled) {
+  background-color: var(--accent-blue-hover);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+}
+
+.sendButton:disabled {
+  background-color: var(--border-light);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.bottomMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 0 0.25rem;
+}
+
+.errorMessage {
+  color: var(--danger);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.charCount {
+  font-variant-numeric: tabular-nums;
+}
+
+.charCount.limitExceeded {
+  color: var(--danger);
+  font-weight: 700;
+}

@@ -1,0 +1,40 @@
+name: Live Provider Smoke Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      with_llm:
+        description: 'Include live chat model LLM generation check'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  live-smoke:
+    name: Live NVIDIA NIM Endpoints Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run live diagnostics
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          PROVIDER_MODE: live
+        run: |
+          if [ "${{ github.event.inputs.with_llm }}" = "true" ]; then
+            python test_pipeline.py --with-llm
+          else
+            python test_pipeline.py
+          fi
