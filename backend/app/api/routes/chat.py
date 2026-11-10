@@ -49,6 +49,16 @@ LOGGER = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class ClosingStreamingResponse(StreamingResponse):
+    """Close the body iterator even if sending a yielded chunk is cancelled."""
+
+    async def stream_response(self, send: Any) -> None:
+        try:
+            await super().stream_response(send)
+        finally:
+            await self.body_iterator.aclose()
+
+
 def format_sse_event(event: PipelineEvent) -> str:
     """Formats a PipelineEvent envelope into standard SSE wire format: `data: {...}\n\n`."""
     return event.to_sse()
@@ -365,7 +375,6 @@ async def chat_stream(
     event_queue: queue.Queue[PipelineEvent | Exception | object] = queue.Queue(maxsize=32)
     stop_event = threading.Event()
     _SENTINEL = object()
-    active_iter: list[Any] = []
 
     def run_worker() -> None:
         try:
@@ -374,7 +383,6 @@ async def chat_stream(
                 history=history,
                 request_id=req_id,
             )
-            active_iter.append(stream_iter)
             for event in stream_iter:
                 while not stop_event.is_set():
                     try:
@@ -399,6 +407,11 @@ async def chat_stream(
                     except queue.Full:
                         continue
         finally:
+            if "stream_iter" in locals() and hasattr(stream_iter, "close"):
+                try:
+                    stream_iter.close()
+                except Exception:
+                    LOGGER.exception("Failed to close streaming worker (request_id=%s)", req_id)
             try:
                 event_queue.put(_SENTINEL, timeout=0.5)
             except Exception:
@@ -490,11 +503,6 @@ async def chat_stream(
                 yield format_sse_event(error_event)
         finally:
             stop_event.set()
-            if active_iter and hasattr(active_iter[0], "close"):
-                try:
-                    active_iter[0].close()
-                except Exception:
-                    pass
             while not event_queue.empty():
                 try:
                     event_queue.get_nowait()
@@ -504,7 +512,7 @@ async def chat_stream(
             worker_thread.join(timeout=1.0)
             semaphore.release()
 
-    return StreamingResponse(
+    return ClosingStreamingResponse(
         stream_generator(),
         media_type="text/event-stream",
         headers={
