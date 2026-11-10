@@ -17,6 +17,12 @@ Recruiters, hiring managers, and engineers can explore broad career highlights o
 - **Modern Next.js Frontend**: Responsive interface with streaming chat, interactive source citations, suggestion pills, and dark aesthetic.
 - **100% Offline Test Suite**: Comprehensive mocked unit and integration test suite that runs in seconds without making network requests or consuming API credits.
 
+## Screenshots
+
+The portfolio assistant opens with suggested questions and a streaming chat composer, alongside profile details and the RAG stack.
+
+![CV RAG assistant home screen](docs/screenshots/chat-home.png)
+
 ---
 
 ## Architecture
